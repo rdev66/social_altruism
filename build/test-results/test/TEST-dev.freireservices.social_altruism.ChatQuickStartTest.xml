@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="dev.freireservices.social_altruism.ChatQuickStartTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2023-12-22T08:02:22" hostname="MacBook-Pro.local" time="0.952">
+  <properties/>
+  <testcase name="testActorGetsUserDenied" classname="dev.freireservices.social_altruism.ChatQuickStartTest" time="0.856"/>
+  <testcase name="testGreeterActorSendingOfGreeting" classname="dev.freireservices.social_altruism.ChatQuickStartTest" time="0.088"/>
+  <system-out><![CDATA[[2023-12-22 09:02:23,397] [INFO] [akka.event.slf4j.Slf4jLogger] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [] - Slf4jLogger started
+[2023-12-22 09:02:23,552] [ERROR] [akka.actor.testkit.typed.internal.ActorTestKitGuardian$$anonfun$handleSpawnException$1] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user] - Spawn failed, props [EmptyProps]
+akka.actor.InvalidActorNameException: actor name [chatRoom] is not unique!
+	at akka.actor.dungeon.ChildrenContainer$NormalChildrenContainer.reserve(ChildrenContainer.scala:134)
+	at akka.actor.dungeon.Children.reserveChild(Children.scala:147)
+	at akka.actor.dungeon.Children.reserveChild$(Children.scala:145)
+	at akka.actor.ActorCell.reserveChild(ActorCell.scala:410)
+	at akka.actor.dungeon.Children.makeChild(Children.scala:300)
+	at akka.actor.dungeon.Children.actorOf(Children.scala:49)
+	at akka.actor.dungeon.Children.actorOf$(Children.scala:48)
+	at akka.actor.ActorCell.actorOf(ActorCell.scala:410)
+	at akka.actor.typed.internal.adapter.ActorRefFactoryAdapter$.spawn(ActorRefFactoryAdapter.scala:55)
+	at akka.actor.typed.internal.adapter.ActorContextAdapter.spawn(ActorContextAdapter.scala:73)
+	at akka.actor.testkit.typed.internal.ActorTestKitGuardian$.$anonfun$testKitGuardian$1(TestKitUtils.scala:35)
+	at akka.actor.typed.internal.BehaviorImpl$ReceiveBehavior.receive(BehaviorImpl.scala:136)
+	at akka.actor.typed.Behavior$.interpret(Behavior.scala:282)
+	at akka.actor.typed.Behavior$.interpretMessage(Behavior.scala:238)
+	at akka.actor.typed.internal.InterceptorImpl$$anon$2.apply(InterceptorImpl.scala:57)
+	at akka.actor.typed.internal.adapter.GuardianStopInterceptor.aroundReceive(GuardianStartupBehavior.scala:59)
+	at akka.actor.typed.internal.InterceptorImpl.receive(InterceptorImpl.scala:85)
+	at akka.actor.typed.Behavior$.interpret(Behavior.scala:282)
+	at akka.actor.typed.Behavior$.interpretMessage(Behavior.scala:238)
+	at akka.actor.typed.internal.adapter.ActorAdapter.handleMessage(ActorAdapter.scala:133)
+	at akka.actor.typed.internal.adapter.ActorAdapter.aroundReceive(ActorAdapter.scala:109)
+	at akka.actor.ActorCell.receiveMessage(ActorCell.scala:579)
+	at akka.actor.ActorCell.invoke(ActorCell.scala:547)
+	at akka.dispatch.Mailbox.processMailbox(Mailbox.scala:270)
+	at akka.dispatch.Mailbox.run(Mailbox.scala:231)
+	at akka.dispatch.Mailbox.exec(Mailbox.scala:243)
+	at java.base/java.util.concurrent.ForkJoinTask.doExec(ForkJoinTask.java:387)
+	at java.base/java.util.concurrent.ForkJoinPool$WorkQueue.topLevelExec(ForkJoinPool.java:1311)
+	at java.base/java.util.concurrent.ForkJoinPool.scan(ForkJoinPool.java:1840)
+	at java.base/java.util.concurrent.ForkJoinPool.runWorker(ForkJoinPool.java:1806)
+	at java.base/java.util.concurrent.ForkJoinWorkerThread.run(ForkJoinWorkerThread.java:177)
+[2023-12-22 09:02:23,640] [INFO] [akka.actor.LocalActorRef] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user/$a] - Message [dev.freireservices.social_altruism.ChatRoom$GetSession] to Actor[akka://ChatQuickStartTest/user/$a#-835521502] was not delivered. [1] dead letters encountered. If this is not an expected behavior then Actor[akka://ChatQuickStartTest/user/$a#-835521502] may have terminated unexpectedly. This logging can be turned off or adjusted with configuration settings 'akka.log-dead-letters' and 'akka.log-dead-letters-during-shutdown'.
+[2023-12-22 09:02:23,665] [INFO] [akka.actor.CoordinatedShutdown] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [CoordinatedShutdown(akka://ChatQuickStartTest)] - Running CoordinatedShutdown with reason [ActorSystemTerminateReason]
+]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
