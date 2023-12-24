@@ -12,7 +12,3 @@
 
 Comprobar cómo de dispuesta está la gente a contribuir a un bien, que será compartido por todos por igual,
 hayan contribuido o no.
-
--Un Chat genera una sesión para cada jugador.
--Cada chat tiene 2 o más participantes.
--Los chats tienen varios jugadores y ahí se juegan turnos.

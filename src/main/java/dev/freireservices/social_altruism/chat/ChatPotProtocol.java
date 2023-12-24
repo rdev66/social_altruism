@@ -7,19 +7,23 @@ import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
+import dev.freireservices.social_altruism.chat.commands.Commands;
+import dev.freireservices.social_altruism.chat.events.Events;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 
 public class ChatPotProtocol {
-  private final ActorContext<RoomCommand> context;
+  private final ActorContext<Commands.RoomCommand> context;
+
+  private final List<ActorRef<SessionCommand>> sessions;
 
   public double getCurrentPot() {
     return currentPot;
   }
 
-  public void setCurrentPot(double currentPot) {
-    this.currentPot = currentPot;
+  public void resetPot() {
+    this.currentPot = 0;
   }
 
   public void addToPot(double pot) {
@@ -27,108 +31,134 @@ public class ChatPotProtocol {
   }
 
   private double currentPot = 0.0;
-  private int currentTurn = 0;
-  private final int numberOfParticipants;
 
-  private ChatPotProtocol(ActorContext<RoomCommand> context, int numberOfParticipants) {
-    this.numberOfParticipants = numberOfParticipants;
-    this.context = context;
+  public int getCurrentTurn() {
+    return currentTurn;
   }
 
-  interface RoomCommand {}
+  public int incrementCurrentTurnAndGet() {
+    this.currentTurn++;
+    return this.currentTurn;
+  }
 
-  public record EnterPot(ActorRef<SessionEvent> replyTo, double pot) implements RoomCommand {}
+  private int currentTurn = 0;
+  private int totalTurns = 0;
 
-  // #chatroom-protocol
+  public int getParticipantsInTurn() {
+    return participantsInTurn;
+  }
+
+  public void incrementParticipantsInTurn() {
+    this.participantsInTurn++;
+  }
+
+  public void resetParticipantsInTurn() {
+    this.participantsInTurn = 0;
+  }
+
+  public int getNumberOfParticipants() {
+    return numberOfParticipants;
+  }
+
+  private int participantsInTurn = 0;
+  private final int numberOfParticipants;
+
+  private ChatPotProtocol(
+      ActorContext<Commands.RoomCommand> context,
+      List<ActorRef<SessionCommand>> sessions,
+      int numberOfParticipants,
+      int turns) {
+    this.context = context;
+    this.sessions = sessions;
+    this.numberOfParticipants = numberOfParticipants;
+    this.totalTurns = turns;
+  }
+
   // #chatroom-behavior
-  private record UpdatePlayerAfterTurn(String screenName, String message) implements RoomCommand {}
-
-  // #chatroom-behavior
   // #chatroom-protocol
 
-  private Behavior<RoomCommand> onGetPotSession(
-      EnterPot enterPot, List<ActorRef<SessionCommand>> sessions) {
+  private Behavior<Commands.RoomCommand> onGetPotSession(Commands.EnterPot enterPot) {
 
-    //Add check session started
-
+    // Add check session started
     if (sessions.stream()
         .anyMatch(
             s ->
-                s.path().name().equals(URLEncoder.encode(enterPot.replyTo.path().name(), UTF_8)))) {
+                s.path()
+                    .name()
+                    .equals(URLEncoder.encode(enterPot.replyTo().path().name(), UTF_8)))) {
 
-      enterPot.replyTo.tell(new SessionDenied("Can only enter a pot once"));
+      enterPot.replyTo().tell(new Events.SessionDenied("Can only enter a pot once"));
     }
 
-    context
-        .getLog()
-        .info("Participant joined {} turn pot: {}", enterPot.replyTo.path().name(), enterPot.pot);
+    context.getLog().info("Participant joined {} pot", enterPot.replyTo().path().name());
 
-    // Add to current pot
-    addToPot(enterPot.pot);
+    ActorRef<Events.SessionEvent> client = enterPot.replyTo();
 
-    ActorRef<SessionEvent> client = enterPot.replyTo;
-
-    ActorRef<SessionCommand> ses =
+    ActorRef<SessionCommand> session =
         context.spawn(
-            Session.create(client), URLEncoder.encode(enterPot.replyTo.path().name(), UTF_8));
+            Session.create(client), URLEncoder.encode(enterPot.replyTo().path().name(), UTF_8));
 
     // narrow to only expose PostMessage
-    client.tell(new SessionGranted(ses.narrow()));
+    client.tell(new Events.SessionGranted(session.narrow()));
 
-    List<ActorRef<SessionCommand>> newSessions = new ArrayList<>(sessions);
+    sessions.add(session);
 
-    newSessions.add(ses);
-
-    if (numberOfParticipants == newSessions.size()) {
-      // Begin
-      context.getLog().info("All participants joined; beginning turn: " + getCurrentPot());
-
-      double amountToShare = (getCurrentPot() * 2) / numberOfParticipants;
-
-      context.getLog().info("Starting pot: " + getCurrentPot());
-
-      newSessions.forEach(s -> s.tell(new SharePotWithParticipants(amountToShare)));
-
-      currentTurn++;
-      return Behaviors.same();
-
+    if (numberOfParticipants == sessions.size()) {
+      context.getLog().info("All participants joined; pot is ready to start.");
+      return createPotBehaviour();
     } else {
       // Waiting for more participants
       context.getLog().info("Waiting for more participants.");
-
-      return createPot(newSessions);
+      return Behaviors.same();
     }
   }
 
-  private Behavior<RoomCommand> onUpdatePlayerAfterTurn(
-      List<ActorRef<SessionCommand>> sessions, UpdatePlayerAfterTurn pub) {
-    // NotifyClient notification = new NotifyClient((new MessagePosted(pub.screenName,
-    // pub.message)));
+  private Behavior<Commands.RoomCommand> onPlayTurn(Commands.PlayTurn playTurn) {
+
+    context
+        .getLog()
+        .info(
+            "Participant {} joined for turn {} with {}",
+            playTurn.replyTo().path().name(),
+            currentTurn,
+            playTurn.pot());
+
+    // Add to current pot
+    addToPot(playTurn.pot());
+    incrementParticipantsInTurn();
+
+    if (getParticipantsInTurn() == numberOfParticipants) {
+
+      double amountToShare = (getCurrentPot() * 2) / numberOfParticipants;
+      sessions.forEach(s -> s.tell(new SharePotWithParticipants(amountToShare)));
+
+      resetPot();
+      resetParticipantsInTurn();
+
+      context.getLog().info("Turn {} complete", getCurrentTurn());
+
+      if (incrementCurrentTurnAndGet() == totalTurns) {
+        context.getLog().info("All turns completed");
+        return Behaviors.stopped();
+      }
+    }
 
     return Behaviors.same();
   }
 
-  private Behavior<RoomCommand> createPot(List<ActorRef<SessionCommand>> sessions) {
-    return Behaviors.receive(RoomCommand.class)
-        .onMessage(EnterPot.class, enterPot -> onGetPotSession(enterPot, sessions))
-        //
-        .onMessage(UpdatePlayerAfterTurn.class, pub -> onUpdatePlayerAfterTurn(sessions, pub))
+  private Behavior<Commands.RoomCommand> createPotBehaviour() {
+    return Behaviors.receive(Commands.RoomCommand.class)
+        .onMessage(Commands.EnterPot.class, this::onGetPotSession)
+        .onMessage(Commands.PlayTurn.class, this::onPlayTurn)
         .build();
   }
 
-  public static Behavior<RoomCommand> create(int numberOfParticipants) {
-    return Behaviors.setup(ctx -> new ChatPotProtocol(ctx, numberOfParticipants).createPot(emptyList()));
+  public static Behavior<Commands.RoomCommand> create(int numberOfParticipants, int turns) {
+    return Behaviors.setup(
+        ctx ->
+            new ChatPotProtocol(ctx, new ArrayList<>(), numberOfParticipants, turns)
+                .createPotBehaviour());
   }
-
-  public interface SessionEvent {}
-
-  public record SessionGranted(ActorRef<ParticipateInTurn> handle) implements SessionEvent {}
-
-  public record SessionDenied(String reason) implements SessionEvent {}
-
-  public record MessagePosted(String screenName, String message) implements SessionEvent {}
-
-  public record PotReturned(double returnedAmount) implements SessionEvent {}
 
   interface SessionCommand {}
 
@@ -137,7 +167,7 @@ public class ChatPotProtocol {
   public record SharePotWithParticipants(double returnedAmount) implements SessionCommand {}
 
   static class Session {
-    static Behavior<ChatPotProtocol.SessionCommand> create(ActorRef<SessionEvent> client) {
+    static Behavior<ChatPotProtocol.SessionCommand> create(ActorRef<Events.SessionEvent> client) {
       return Behaviors.receive(ChatPotProtocol.SessionCommand.class)
           .onMessage(
               SharePotWithParticipants.class,
@@ -146,8 +176,8 @@ public class ChatPotProtocol {
     }
 
     private static Behavior<SessionCommand> onSharePotWithParticipants(
-        ActorRef<SessionEvent> client, double returnedAmount) {
-      client.tell(new ChatPotProtocol.PotReturned(returnedAmount));
+        ActorRef<Events.SessionEvent> participant, double returnedAmount) {
+      participant.tell(new Events.PotReturned(participant, returnedAmount));
       return Behaviors.same();
     }
   }
