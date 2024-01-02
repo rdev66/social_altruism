@@ -1,73 +1,93 @@
 package dev.freireservices.social_altruism.chat;
 
 import static dev.freireservices.social_altruism.chat.participant.ParticipantType.*;
+import static java.net.URLEncoder.encode;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.mockito.Mockito.mock;
 
 import akka.actor.testkit.typed.javadsl.ActorTestKit;
 import akka.actor.testkit.typed.javadsl.TestProbe;
 import akka.actor.typed.ActorRef;
-import dev.freireservices.social_altruism.chat.commands.PotRoomProtocol;
-import dev.freireservices.social_altruism.chat.events.ParticipantProtocol;
+import akka.actor.typed.javadsl.ActorContext;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.SessionStarted;
+import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.Participant;
 import dev.freireservices.social_altruism.chat.potroom.PotRoom;
+import dev.freireservices.social_altruism.chat.potroom.Session;
+
 import java.time.Duration;
 import java.util.List;
+
+import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
 import org.junit.Test;
 
-// #definition
 public class PotQuickStartTest {
+    public static final int INITIAL_COINS = 100;
+    public static final int TOTAL_PARTICIPANTS = 3;
 
-  // #definition
+    @Test
+    // FIXME - Improve or delete..
+    public void testCooperationCaseOne() throws InterruptedException {
 
-  // #test
-  @Test
-  // FIXME - Improve or delete..
-  public void testCooperationCaseOne() {
+        final ActorTestKit testKit = ActorTestKit.create();
 
-    final ActorTestKit testKit = ActorTestKit.create();
+        TestProbe<ParticipantMessage> testProbe =
+                testKit.createTestProbe("TestProbe");
 
-    ActorRef<PotRoomProtocol.PotRoomMessage> chatRoomTest =
-        testKit.spawn(PotRoom.create(3, 1), "potRoom");
+        ActorRef<PotRoomProtocol.PotRoomMessage> chatRoomTest =
+                testKit.spawn(PotRoom.create(3, 1), "potRoom");
 
-    ActorRef<ParticipantProtocol.ParticipantMessage> p1 = testKit.spawn(Participant.create(100, PICARO), "PICARO-1");
+        ActorRef<ParticipantMessage> p1 =
+                testKit.spawn(Participant.create(INITIAL_COINS, PICARO), "PICARO-1");
 
-    ActorRef<ParticipantProtocol.ParticipantMessage> p2 = testKit.spawn(Participant.create(100, JUSTICIERO), "JUSTICIERO-1");
+        ActorRef<ParticipantMessage> p2 =
+                testKit.spawn(Participant.create(INITIAL_COINS, JUSTICIERO), "JUSTICIERO-1");
 
-    ActorRef<ParticipantProtocol.ParticipantMessage> p3 = testKit.spawn(Participant.create(10, SANTO), "SANTO-1");
+        ActorRef<ParticipantMessage> p3 =
+                testKit.spawn(Participant.create(INITIAL_COINS, SANTO), "SANTO-1");
 
-    final List<ActorRef<ParticipantProtocol.ParticipantMessage>> sessions = List.of(p1, p2, p3);
 
-    // Enter POT
-    chatRoomTest.tell(new PotRoomProtocol.EnterPot(p1));
-    chatRoomTest.tell(new PotRoomProtocol.EnterPot(p2));
-    chatRoomTest.tell(new PotRoomProtocol.EnterPot(p3));
+        ActorRef<SessionMessage> sessionP1 =
+                testKit.spawn(Session.create(TOTAL_PARTICIPANTS, 1), encode(p1.path().name(), UTF_8));
+        ActorRef<SessionMessage> sessionP2 =
+                testKit.spawn(Session.create(TOTAL_PARTICIPANTS, 1), encode(p2.path().name(), UTF_8));
+        ActorRef<SessionMessage> sessionP3 =
+                testKit.spawn(Session.create(TOTAL_PARTICIPANTS, 1), encode(p3.path().name(), UTF_8));
 
-    // Turnos
-    chatRoomTest.tell(new PotRoomProtocol.PlayTurn(p1,0));
-    chatRoomTest.tell(new PotRoomProtocol.PlayTurn(p2,1));
-    chatRoomTest.tell(new PotRoomProtocol.PlayTurn(p3, 3));
+        final List<ActorRef<SessionMessage>> sessions = List.of(sessionP1, sessionP2, sessionP3);
 
-    // #assert
-    // #assert
+        // Enter POT
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(p1));
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(p2));
+        //chatRoomTest.tell(new PotRoomProtocol.EnterPot(p3));
 
-  }
+        //Session started
 
-  @Test
-  public void testActorGetsUserDenied() {
-    final ActorTestKit testKit = ActorTestKit.create();
-    TestProbe<ParticipantProtocol.ParticipantMessage> testProbe = testKit.createTestProbe("TestProbe");
+        testProbe.expectMessageClass(SessionStarted.class, Duration.ofSeconds(10));
 
-    ActorRef<PotRoomProtocol.PotRoomMessage> chatRoomTest =
-        testKit.spawn(PotRoom.create(2, 1), "chatRoom");
 
-    chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
+    }
 
-    testProbe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(10));
+    @Test
+    public void testActorGetsUserDenied() {
+        final ActorTestKit testKit = ActorTestKit.create();
+        TestProbe<ParticipantMessage> testProbe =
+                testKit.createTestProbe("TestProbe");
 
-    chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
+        ActorRef<PotRoomProtocol.PotRoomMessage> chatRoomTest =
+                testKit.spawn(PotRoom.create(2, 1), "chatRoom");
 
-    testProbe.expectMessage(
-        Duration.ofSeconds(10), new ParticipantProtocol.SessionDenied("Can only enter a pot once"));
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
 
-    // #assert
-  }
+        testProbe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(10));
+
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
+
+        testProbe.expectMessage(
+                Duration.ofSeconds(10), new ParticipantProtocol.SessionDenied("Can only enter a pot once"));
+
+        // #assert
+    }
 }

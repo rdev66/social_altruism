@@ -1,8 +1,0 @@
-Ž[2023-12-23 11:22:37,346] [INFO] [akka.event.slf4j.Slf4jLogger] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [] - Slf4jLogger started
-î[2023-12-23 11:22:37,495] [INFO] [dev.freireservices.social_altruism.chat.ChatPotProtocol] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user/chatRoom] - Participant joined participanteUno turn pot: 10.0
-Û[2023-12-23 11:22:37,497] [INFO] [dev.freireservices.social_altruism.chat.ChatPotProtocol] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user/chatRoom] - Waiting for more participants.
-í[2023-12-23 11:22:37,498] [INFO] [dev.freireservices.social_altruism.chat.ChatPotProtocol] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user/chatRoom] - Participant joined participanteDos turn pot: 1.0
-ê[2023-12-23 11:22:37,500] [INFO] [dev.freireservices.social_altruism.chat.ChatPotProtocol] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user/chatRoom] - All participants joined; beginning turn: 11.0
-Ï[2023-12-23 11:22:37,500] [INFO] [dev.freireservices.social_altruism.chat.ChatPotProtocol] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user/chatRoom] - Starting pot: 11.0
-Ó[2023-12-23 11:22:37,502] [INFO] [dev.freireservices.social_altruism.chat.Participante] [ChatQuickStartTest-akka.actor.default-dispatcher-5] [akka://ChatQuickStartTest/user/participanteUno] - Pot returned: 11.0
-Ó[2023-12-23 11:22:37,502] [INFO] [dev.freireservices.social_altruism.chat.Participante] [ChatQuickStartTest-akka.actor.default-dispatcher-3] [akka://ChatQuickStartTest/user/participanteDos] - Pot returned: 11.0

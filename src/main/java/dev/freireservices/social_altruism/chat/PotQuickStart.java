@@ -7,8 +7,8 @@ import akka.actor.typed.ActorSystem;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.Terminated;
 import akka.actor.typed.javadsl.Behaviors;
-import dev.freireservices.social_altruism.chat.commands.PotRoomProtocol;
-import dev.freireservices.social_altruism.chat.events.ParticipantProtocol;
+import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.Participant;
 import dev.freireservices.social_altruism.chat.potroom.PotRoom;
 import java.util.ArrayList;
@@ -53,7 +53,7 @@ public class PotQuickStart {
 
 /*            for (int i = 0; i < numberOfTurns; i++) {
               // Participar en cada turno cantidad diferente
-              for (ActorRef<ParticipantProtocol.ParticipantMessage> session : sessions) {
+              for (ActorRef<ParticipantProtocol.ParticipantMessage> session : participants) {
 
                 // Pícaro
                 if (session.path().name().contains("participante-0")) {
