@@ -10,6 +10,7 @@ import akka.actor.testkit.typed.javadsl.TestProbe;
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.javadsl.ActorContext;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.SessionEnded;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.SessionStarted;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
@@ -20,6 +21,7 @@ import dev.freireservices.social_altruism.chat.potroom.Session;
 import java.time.Duration;
 import java.util.List;
 
+import dev.freireservices.social_altruism.chat.potroom.SessionProtocol;
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
 import org.junit.Test;
 
@@ -48,24 +50,15 @@ public class PotQuickStartTest {
         ActorRef<ParticipantMessage> p3 =
                 testKit.spawn(Participant.create(INITIAL_COINS, SANTO), "SANTO-1");
 
-
-        ActorRef<SessionMessage> sessionP1 =
-                testKit.spawn(Session.create(TOTAL_PARTICIPANTS, 1), encode(p1.path().name(), UTF_8));
-        ActorRef<SessionMessage> sessionP2 =
-                testKit.spawn(Session.create(TOTAL_PARTICIPANTS, 1), encode(p2.path().name(), UTF_8));
-        ActorRef<SessionMessage> sessionP3 =
-                testKit.spawn(Session.create(TOTAL_PARTICIPANTS, 1), encode(p3.path().name(), UTF_8));
-
-        final List<ActorRef<SessionMessage>> sessions = List.of(sessionP1, sessionP2, sessionP3);
-
         // Enter POT
         chatRoomTest.tell(new PotRoomProtocol.EnterPot(p1));
         chatRoomTest.tell(new PotRoomProtocol.EnterPot(p2));
-        //chatRoomTest.tell(new PotRoomProtocol.EnterPot(p3));
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(p3));
+        //chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
 
         //Session started
 
-        testProbe.expectMessageClass(SessionStarted.class, Duration.ofSeconds(10));
+        testProbe.expectMessageClass(SessionEnded.class, Duration.ofSeconds(20));
 
 
     }

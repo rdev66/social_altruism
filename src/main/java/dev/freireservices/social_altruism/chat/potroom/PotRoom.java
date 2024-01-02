@@ -26,11 +26,10 @@ public class PotRoom {
 
     private PotRoom(
             ActorContext<PotRoomMessage> context,
-            List<ActorRef<ParticipantMessage>> participants,
             int numberOfParticipants,
             int totalTurns) {
         this.context = context;
-        this.participants = participants;
+        this.participants = new ArrayList<>();
         this.numberOfParticipants = numberOfParticipants;
         this.totalTurns = totalTurns;
     }
@@ -44,17 +43,17 @@ public class PotRoom {
 
         ActorRef<ParticipantMessage> participant = enterPot.replyTo();
 
-        ActorRef<SessionMessage> session =
-                context.spawn(
-                        Session.create(getNumberOfParticipants(), totalTurns),
-                        URLEncoder.encode(enterPot.replyTo().path().name(), UTF_8));
-
-        participant.tell(new SessionGranted(chatRoom, session.narrow()));
-
         participants.add(participant);
 
         if (getNumberOfParticipants() == participants.size()) {
             context.getLog().info("All participants joined; pot is ready to start.");
+
+            ActorRef<SessionMessage> session =
+                    context.spawn(
+                            Session.create(participants, totalTurns),
+                            URLEncoder.encode(enterPot.replyTo().path().name(), UTF_8));
+
+            participant.tell(new SessionGranted(chatRoom, session.narrow()));
 
             // Communicate session start and share pot info with all participants
             participants.forEach(p -> p.tell(new SessionStarted(chatRoom, session, participants, totalTurns)));
@@ -62,7 +61,7 @@ public class PotRoom {
             return createPotBehaviour(chatRoom);
         } else {
             // Waiting for more participants
-            context.getLog().info("Waiting for more participants.");
+            context.getLog().info("Waiting for {} more participant(s).", numberOfParticipants - participants.size());
             return Behaviors.same();
         }
     }
@@ -87,10 +86,8 @@ public class PotRoom {
                 .build();
     }
 
-    public static Behavior<PotRoomMessage> create(int numberOfParticipants, int turns) {
+    public static Behavior<PotRoomMessage> create(int numberOfParticipants, int totalTurns) {
         return Behaviors.setup(
-                ctx ->
-                        new PotRoom(ctx, new ArrayList<>(), numberOfParticipants, turns)
-                                .createPotBehaviour(ctx.getSelf()));
+                ctx -> new PotRoom(ctx, numberOfParticipants, totalTurns).createPotBehaviour(ctx.getSelf()));
     }
 }

@@ -1,6 +1,7 @@
 package dev.freireservices.social_altruism.chat.potroom;
 
 import akka.actor.typed.ActorRef;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
 import lombok.Getter;
@@ -20,18 +21,21 @@ public class SessionProtocol {
             implements SessionMessage {
     }
 
-    public record ParticipateInTurn(String message) implements SessionMessage {
-    }
-
     public record ShareReturnPotWithParticipants(
             ActorRef<SessionMessage> session,
-            ActorRef<ParticipantMessage> participant,
+            List<ActorRef<ParticipantMessage>> participants,
             double returnedAmount) implements SessionMessage {
     }
+
+
+    public record EndSession() implements SessionMessage { }
+
+
 
     public record PlayTurn(
             ActorRef<SessionMessage> session,
             ActorRef<ParticipantMessage> replyTo,
+            List<ActorRef<ParticipantMessage>> participants,
             int turn,
             double pot)
             implements SessionMessage {

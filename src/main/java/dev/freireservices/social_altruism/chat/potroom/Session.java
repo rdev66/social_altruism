@@ -6,11 +6,15 @@ import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.PotReturned;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.SessionEnded;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.SessionStarted;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
-import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
+import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.*;
 import lombok.Getter;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @Getter
 public class Session {
@@ -18,16 +22,16 @@ public class Session {
     private final ActorContext<SessionMessage> context;
     private int currentTurn = 0;
     private final int totalTurns;
-    private final int numberOfParticipants;
+    private final List<ActorRef<ParticipantMessage>> participants;
 
     private double currentPot = 0.0;
-    private int participantsInCurrentTurn;
+    private int numberOfParticipantsInCurrentTurn;
 
 
-    public Session(ActorContext<SessionMessage> context, int totalTurns, int numberOfParticipants) {
+    public Session(ActorContext<SessionMessage> context, List<ActorRef<ParticipantMessage>> participants, int totalTurns) {
         this.context = context;
+        this.participants = participants;
         this.totalTurns = totalTurns;
-        this.numberOfParticipants = numberOfParticipants;
     }
 
 
@@ -40,11 +44,11 @@ public class Session {
     }
 
     public void incrementParticipantsInTurn() {
-        this.participantsInCurrentTurn++;
+        this.numberOfParticipantsInCurrentTurn++;
     }
 
-    public void resetParticipantsInTurn() {
-        this.participantsInCurrentTurn = 0;
+    public void resetNumberOfParticipantsInTurn() {
+        this.numberOfParticipantsInCurrentTurn = 0;
     }
 
     public int incrementCurrentTurnAndGet() {
@@ -54,23 +58,24 @@ public class Session {
 
     public Behavior<SessionMessage> createSessionBehaviour() {
         return Behaviors.receive(SessionMessage.class)
-                .onMessage(SessionProtocol.StartSession.class, startSession -> onSessionStarted(startSession.chatRoom()
+                .onMessage(StartSession.class, startSession -> onSessionStarted(startSession.chatRoom()
                         , startSession.replyTo(), startSession.participants(), totalTurns))
-                .onMessage(SessionProtocol.PlayTurn.class, this::onPlayTurn)
-                .onMessage(SessionProtocol.ShareReturnPotWithParticipants.class,
-                        sharePot -> onSharePotWithParticipant(sharePot.session(), sharePot.participant(), sharePot.returnedAmount()))
+                .onMessage(PlayTurn.class, this::onPlayTurn)
+                .onMessage(EndSession.class, endSession -> onSessionEnded(participants))
+                .onMessage(ShareReturnPotWithParticipants.class,
+                        sharePot -> onReturnPotToParticipants(sharePot.session(), sharePot.participants(), sharePot.returnedAmount()))
                 .build();
     }
 
 
-    public static Behavior<SessionMessage> create(int numberOfParticipants, int turns) {
-        return Behaviors.setup(context -> new Session(context, numberOfParticipants, turns)
+    public static Behavior<SessionMessage> create(List<ActorRef<ParticipantMessage>> participants, int totalTurns) {
+        return Behaviors.setup(context -> new Session(context, participants, totalTurns)
                 .createSessionBehaviour());
     }
 
 
     private Behavior<SessionMessage> onPlayTurn(
-            SessionProtocol.PlayTurn playTurn) {
+            PlayTurn playTurn) {
         context.getLog()
                 .info("Participant {} joined for turn {} with {}",
                         playTurn.replyTo().path().name(),
@@ -81,23 +86,35 @@ public class Session {
         addToPot(playTurn.pot());
         incrementParticipantsInTurn();
 
-        if (getParticipantsInCurrentTurn() == numberOfParticipants) {
+        if (getNumberOfParticipantsInCurrentTurn() == participants.size()) {
 
-            double amountToShare = (getCurrentPot() * 2) / numberOfParticipants;
+            double amountToShare = (getCurrentPot() * 2) / participants.size();
 
-            playTurn.session().narrow().tell(new SessionProtocol.ShareReturnPotWithParticipants(playTurn.session(), playTurn.replyTo(), amountToShare));
+            playTurn.session().narrow().tell(new ShareReturnPotWithParticipants(playTurn.session(), playTurn.participants(), amountToShare));
 
             resetPot();
-            resetParticipantsInTurn();
+            resetNumberOfParticipantsInTurn();
 
             context.getLog().info("Turn {} complete", getCurrentTurn());
 
             if (incrementCurrentTurnAndGet() == totalTurns) {
                 context.getLog().info("All turns completed");
-                //return Behaviors.stopped();
+                context.getLog().info("Waiting for other messages, then ending session.");
+                try {
+                    TimeUnit.SECONDS.sleep(5);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                playTurn.session().narrow().tell(new EndSession());
+
             }
         }
         return Behaviors.same();
+    }
+
+    private Behavior<SessionMessage> onSessionEnded(List<ActorRef<ParticipantMessage>> participants) {
+        participants.forEach(participant -> participant.tell(new SessionEnded()));
+        return Behaviors.stopped();
     }
 
     private static Behavior<SessionMessage> onSessionStarted(
@@ -105,15 +122,15 @@ public class Session {
             ActorRef<SessionMessage> session,
             List<ActorRef<ParticipantMessage>> participants,
             int totalTurns) {
-        participants.forEach(s -> s.tell(new ParticipantProtocol.SessionStarted(chatRoom, session, participants, totalTurns)));
+        participants.forEach(s -> s.tell(new SessionStarted(chatRoom, session, participants, totalTurns)));
         return Behaviors.same();
     }
 
-    private static Behavior<SessionMessage> onSharePotWithParticipant(
+    private static Behavior<SessionMessage> onReturnPotToParticipants(
             ActorRef<SessionMessage> session,
-            ActorRef<ParticipantMessage> participant,
+            List<ActorRef<ParticipantMessage>> participants,
             double returnedAmount) {
-        participant.tell(new ParticipantProtocol.PotReturned(session, participant, returnedAmount));
+        participants.forEach(participant -> participant.tell(new PotReturned(session, participant, returnedAmount)));
         return Behaviors.same();
     }
 

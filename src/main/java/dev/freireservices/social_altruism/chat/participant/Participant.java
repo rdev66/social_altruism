@@ -7,10 +7,13 @@ import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
-import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
 
 import java.security.SecureRandom;
+import java.sql.Time;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol;
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
@@ -27,19 +30,19 @@ public class Participant {
 
     private boolean collaborateSwitch;
     private int currentTurn;
-    private double coins;
+    private double participantCoins;
     private final double initialCoins;
-    private int participantNumber;
+    private List<ActorRef<ParticipantMessage>> participants;
     private int totalTurns;
     private final ParticipantType participantType;
 
     private Participant(
             ActorContext<ParticipantMessage> context,
-            double coins,
+            double participantCoins,
             ParticipantType participantType) {
         this.context = context;
-        this.coins = coins;
-        this.initialCoins = coins;
+        this.participantCoins = participantCoins;
+        this.initialCoins = participantCoins;
         this.participantType = participantType;
         this.collaborateSwitch = participantType == JUSTICIERO || participantType == SANTO;
     }
@@ -50,39 +53,51 @@ public class Participant {
     }
 
     public void decrementCoins(double coins) {
-        this.coins -= coins;
+        this.participantCoins -= coins;
     }
 
     public void incrementCoins(double coins) {
-        this.coins += coins;
+        this.participantCoins += coins;
     }
 
     private Behavior<ParticipantMessage> behavior() {
         return Behaviors.receive(ParticipantMessage.class)
-                .onMessage(ParticipantProtocol.SessionStarted.class, this::onSessionStarted)
-                .onMessage(ParticipantProtocol.SessionDenied.class, this::onSessionDenied)
-                .onMessage(ParticipantProtocol.SessionGranted.class, this::onSessionGranted)
-                .onMessage(ParticipantProtocol.PotReturned.class, this::onPotReturned)
+                .onMessage(SessionStarted.class, this::onSessionStarted)
+                .onMessage(SessionDenied.class, this::onSessionDenied)
+                .onMessage(SessionGranted.class, this::onSessionGranted)
+                .onMessage(PotReturned.class, this::onPotReturned)
+                .onMessage(SessionEnded.class, this::onSessionEnded)
                 .build();
     }
 
+    private Behavior<ParticipantMessage> onSessionEnded(SessionEnded sessionEnded) {
+
+        context.getLog().info("Session ended for user {}", context.getSelf().path().name());
+        try {
+            TimeUnit.SECONDS.sleep(1);
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+        return Behaviors.stopped();
+    }
+
     private Behavior<ParticipantMessage> onSessionDenied(
-            ParticipantProtocol.SessionDenied message) {
+            SessionDenied message) {
         context.getLog().info("cannot start chat room session: {}", message.reason());
         return Behaviors.stopped();
     }
 
     private Behavior<ParticipantMessage> onSessionGranted(
-            ParticipantProtocol.SessionGranted message) {
+            SessionGranted message) {
         setChatRoom(message.chatRoom());
         setSession(message.session());
         return Behaviors.same();
     }
 
     private Behavior<ParticipantMessage> onSessionStarted(
-            ParticipantProtocol.SessionStarted startSession) {
+            SessionStarted startSession) {
         resetCurrentTurn();
-        setParticipantNumber(startSession.participants().size());
+        setParticipants(startSession.participants());
         setTotalTurns(startSession.totalTurns());
         playTurn(startSession.replyTo());
         context.getLog().info("Session started for {}  with {} participants", context.getSelf().path().name(), startSession.participants().size());
@@ -90,19 +105,19 @@ public class Participant {
     }
 
     private void playTurn(ActorRef<SessionMessage> replyTo) {
-        if (getCoins() > 0 && getCurrentTurn() < getTotalTurns()) {
+        if (getParticipantCoins() > 0 && getCurrentTurn() < getTotalTurns()) {
             replyTo.tell(new SessionProtocol.PlayTurn(
                     replyTo,
                     context.getSelf(),
+                    participants,
                     getCurrentTurn(),
                     getParticipationForCurrentTurn()
             ));
-            incrementCurrentTurn();
         }
     }
 
     private double getParticipationForCurrentTurn() {
-        var currentTurnCoins = getRandomNumberBetween(0, Math.floor(getCoins()));
+        var currentTurnCoins = getRandomNumberBetween(0, Math.floor(getParticipantCoins()));
         decrementCoins(currentTurnCoins);
         return currentTurnCoins;
     }
@@ -113,21 +128,26 @@ public class Participant {
     }
 
     private Behavior<ParticipantMessage> onPotReturned(
-            ParticipantProtocol.PotReturned potReturned) {
-        context.getLog().info("Pot returned: {}", potReturned.returnedAmount());
+            PotReturned potReturned) {
+        context.getLog().info("Pot returned: {} for participant {}", potReturned.returnedAmount(), potReturned.participant().path().name());
         incrementCoins(potReturned.returnedAmount());
-
+        incrementCurrentTurn();
         context
                 .getLog()
                 .info(
-                        "Player {} has now {} coins; started with {} for a total profit of: {} %",
+                        "Player {} has now {} coins; started with {} for a partial profit of: {} %",
                         potReturned.participant().path().name(),
-                        getCoins(),
+                        getParticipantCoins(),
                         getInitialCoins(),
                         calculateProfit());
 
         // Still game?
-        if (getCoins() > 0) {
+        if (getParticipantCoins() > 1) {
+            try {
+                TimeUnit.SECONDS.sleep(5);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
             playTurn(potReturned.session());
         } else {
             context
@@ -135,17 +155,20 @@ public class Participant {
                     .info(
                             "Player {} has now {} coins; started with {} for a total profit of: {} %",
                             potReturned.participant().path().name(),
-                            getCoins(),
+                            getParticipantCoins(),
                             getInitialCoins(),
                             calculateProfit());
 
+            context.getLog().info("END GAME");
+            context.getLog().info("---------");
+            context.getLog().info("END GAME");
             return Behaviors.stopped();
         }
         adjustBehaviour(potReturned);
         return Behaviors.same();
     }
 
-    private void adjustBehaviour(ParticipantProtocol.PotReturned potReturned) {
+    private void adjustBehaviour(PotReturned potReturned) {
 
         switch (participantType) {
             case SANTO:
@@ -156,14 +179,9 @@ public class Participant {
                 break;
             case JUSTICIERO:
                 // Tweak minimum amount to collaborate
-                setCollaborateSwitch(potReturned.returnedAmount() > getParticipantNumber());
+                setCollaborateSwitch(potReturned.returnedAmount() > participants.size());
                 break;
         }
-    }
-
-    public void participant() {
-        ActorRef<SessionProtocol.ParticipateInTurn> handle;
-        // return this;
     }
 
     public void resetCurrentTurn() {
@@ -171,10 +189,10 @@ public class Participant {
     }
 
     public void incrementCurrentTurn() {
-        setCurrentTurn(this.currentTurn++);
+        setCurrentTurn(++this.currentTurn);
     }
 
     private double calculateProfit() {
-        return Math.round((getCoins() * 100) / getInitialCoins() - 100);
+        return Math.round((getParticipantCoins() * 100) / getInitialCoins() - 100);
     }
 }

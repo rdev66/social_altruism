@@ -31,6 +31,9 @@ public class ParticipantProtocol {
     public record SessionDenied(String reason) implements ParticipantMessage {
     }
 
+    public record SessionEnded() implements ParticipantMessage {
+    }
+
     public record PotReturned(
             ActorRef<SessionMessage> session,
             ActorRef<ParticipantMessage> participant,
