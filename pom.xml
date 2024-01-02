@@ -66,6 +66,15 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.projectlombok/lombok -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+            <scope>provided</scope>
+        </dependency>
+
+
     </dependencies>
     <build>
         <plugins>
@@ -87,7 +96,7 @@
                     <arguments>
                         <argument>-classpath</argument>
                         <classpath />
-                        <argument>dev.freireservices.social_altruism.chat.ChatQuickStart</argument>
+                        <argument>dev.freireservices.social_altruism.chat.PotQuickStart</argument>
                     </arguments>
                 </configuration>
             </plugin>
