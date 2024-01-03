@@ -180,3 +180,4 @@ target
 README.html
 .exercism
 /target/
+/.idea/
