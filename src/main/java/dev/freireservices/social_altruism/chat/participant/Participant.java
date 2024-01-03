@@ -12,8 +12,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static dev.freireservices.social_altruism.chat.participant.ParticipantType.JUSTICIERO;
 import static dev.freireservices.social_altruism.chat.participant.ParticipantType.SANTO;
@@ -59,23 +59,48 @@ public class Participant {
     }
 
     private Behavior<ParticipantMessage> behavior() {
+        return uninitialized();
+    }
+
+    private Behavior<ParticipantMessage> uninitialized() {
         return Behaviors.receive(ParticipantMessage.class)
-                .onMessage(SessionStarted.class, this::onSessionStarted)
                 .onMessage(SessionDenied.class, this::onSessionDenied)
-                .onMessage(SessionGranted.class, this::onSessionGranted)
+                .onMessage(SessionGranted.class, x ->
+                {
+                    onSessionGranted(x);
+                    return readyToStart();
+                })
+                .build();
+    }
+
+    private Behavior<ParticipantMessage> readyToStart() {
+        return Behaviors.receive(ParticipantMessage.class)
+                .onMessage(SessionStarted.class,
+                        x -> {
+                            onSessionStarted(x);
+                            return started();
+                        }
+                )
+                .build();
+    }
+
+    private Behavior<ParticipantMessage> started() {
+        return Behaviors.receive(ParticipantMessage.class)
                 .onMessage(PotReturned.class, this::onPotReturned)
                 .onMessage(SessionEnded.class, this::onSessionEnded)
                 .build();
     }
 
+
     private Behavior<ParticipantMessage> onSessionEnded(SessionEnded sessionEnded) {
 
         context.getLog().info("Session ended for user {}", context.getSelf().path().name());
-        try {
-            TimeUnit.SECONDS.sleep(1);
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
+
+        context.getLog().info("Session ended for user: Stats: {}. Earned {} coins, profit {} %"
+                , context.getSelf().path().name()
+                , getParticipantCoins() - getInitialCoins()
+                , (getParticipantCoins() - getInitialCoins())
+        );
         return Behaviors.stopped();
     }
 
@@ -85,32 +110,33 @@ public class Participant {
         return Behaviors.stopped();
     }
 
-    private Behavior<ParticipantMessage> onSessionGranted(
+    private void onSessionGranted(
             SessionGranted message) {
+        context.getLog().info("Session granted message received for {} ", context.getSelf().path().name());
         setChatRoom(message.chatRoom());
         setSession(message.session());
-        return Behaviors.same();
     }
 
-    private Behavior<ParticipantMessage> onSessionStarted(
+    private void onSessionStarted(
             SessionStarted startSession) {
+        context.getLog().info("Session started for {}  with {} participants", context.getSelf().path().name(), startSession.participants().size());
         resetCurrentTurn();
         setParticipants(startSession.participants());
         setTotalTurns(startSession.totalTurns());
-        playTurn(startSession.replyTo());
-        context.getLog().info("Session started for {}  with {} participants", context.getSelf().path().name(), startSession.participants().size());
-        return Behaviors.same();
+        playTurnWithSmallDelay(startSession.replyTo());
     }
 
-    private void playTurn(ActorRef<SessionMessage> replyTo) {
+    private void playTurnWithSmallDelay(ActorRef<SessionMessage> replyTo) {
         if (getParticipantCoins() > 0 && getCurrentTurn() < getTotalTurns()) {
-            replyTo.tell(new SessionProtocol.PlayTurn(
+            context.scheduleOnce(Duration.ofSeconds(5),
                     replyTo,
-                    context.getSelf(),
-                    participants,
-                    getCurrentTurn(),
-                    getParticipationForCurrentTurn()
-            ));
+                    new SessionProtocol.PlayTurn(
+                            replyTo,
+                            context.getSelf(),
+                            participants,
+                            getCurrentTurn(),
+                            getParticipationForCurrentTurn())
+            );
         }
     }
 
@@ -141,12 +167,7 @@ public class Participant {
 
         // Still game?
         if (getParticipantCoins() > 1) {
-            try {
-                TimeUnit.SECONDS.sleep(5);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            playTurn(potReturned.session());
+            playTurnWithSmallDelay(potReturned.session());
         } else {
             context
                     .getLog()
@@ -160,7 +181,10 @@ public class Participant {
             context.getLog().info("END GAME");
             context.getLog().info("---------");
             context.getLog().info("END GAME");
-            return Behaviors.stopped();
+
+            context.stop(context.getSelf());
+            Behaviors.stopped();
+
         }
         adjustBehaviour(potReturned);
         return Behaviors.same();

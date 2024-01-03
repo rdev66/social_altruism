@@ -20,16 +20,6 @@ public class SessionProtocol {
             implements SessionMessage {
     }
 
-    public record ShareReturnPotWithParticipants(
-            ActorRef<SessionMessage> session,
-            List<ActorRef<ParticipantMessage>> participants,
-            double returnedAmount) implements SessionMessage {
-    }
-
-
-    public record EndSession() implements SessionMessage { }
-
-
 
     public record PlayTurn(
             ActorRef<SessionMessage> session,
@@ -39,5 +29,14 @@ public class SessionProtocol {
             double pot)
             implements SessionMessage {
     }
+
+    public record ShareReturnPotWithParticipants(
+            ActorRef<SessionMessage> session,
+            List<ActorRef<ParticipantMessage>> participants,
+            double returnedAmount) implements SessionMessage {
+    }
+
+
+    public record EndSession() implements SessionMessage { }
 
 }

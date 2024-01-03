@@ -2,7 +2,6 @@ package dev.freireservices.social_altruism.chat;
 
 import akka.actor.testkit.typed.javadsl.ActorTestKit;
 import akka.actor.testkit.typed.javadsl.BehaviorTestKit;
-import akka.actor.testkit.typed.javadsl.BehaviorTestKit$;
 import akka.actor.testkit.typed.javadsl.TestProbe;
 import akka.actor.typed.ActorRef;
 import dev.freireservices.social_altruism.chat.participant.Participant;
@@ -16,13 +15,12 @@ import java.time.Duration;
 
 import static dev.freireservices.social_altruism.chat.participant.ParticipantType.*;
 
-public class PotQuickStartTest {
+public class ProtocolTests {
     public static final int INITIAL_COINS = 100;
     public static final int TOTAL_PARTICIPANTS = 4;
 
     @Test
-    // FIXME - Improve or delete..
-    public void testCooperationCaseOne() {
+    public void testSessionStartedOnJoinParticipants() {
 
         final ActorTestKit testKit = ActorTestKit.create();
 
@@ -57,8 +55,25 @@ public class PotQuickStartTest {
 
     }
 
+
     @Test
-    public void testActorGetsUserDenied() {
+    public void testActorGetsSessionGranted() {
+        final ActorTestKit testKit = ActorTestKit.create();
+        TestProbe<ParticipantMessage> testProbe =
+                testKit.createTestProbe("TestProbe");
+
+        ActorRef<PotRoomProtocol.PotRoomMessage> chatRoomTest =
+                testKit.spawn(PotRoom.create(1, 1), "chatRoom");
+
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
+
+        testProbe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(10));
+
+        // #assert
+    }
+
+    @Test
+    public void testActorGetsSessionDenied() {
         final ActorTestKit testKit = ActorTestKit.create();
         TestProbe<ParticipantMessage> testProbe =
                 testKit.createTestProbe("TestProbe");
@@ -67,13 +82,26 @@ public class PotQuickStartTest {
                 testKit.spawn(PotRoom.create(2, 1), "chatRoom");
 
         chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
-
-        testProbe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(10));
-
         chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
 
-        testProbe.expectMessage(
-                Duration.ofSeconds(10), new ParticipantProtocol.SessionDenied("Can only enter a pot once"));
+        testProbe.expectMessageClass(ParticipantProtocol.SessionDenied.class, Duration.ofSeconds(5));
+
+        // #assert
+    }
+
+    @Test
+    public void testMultipleSessions() {
+        final ActorTestKit testKit = ActorTestKit.create();
+        TestProbe<ParticipantMessage> testProbe =
+                testKit.createTestProbe("TestProbe");
+
+        ActorRef<PotRoomProtocol.PotRoomMessage> chatRoomTest =
+                testKit.spawn(PotRoom.create(2, 1), "chatRoom");
+
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
+        chatRoomTest.tell(new PotRoomProtocol.EnterPot(testProbe.ref()));
+
+        testProbe.expectMessageClass(ParticipantProtocol.SessionDenied.class, Duration.ofSeconds(5));
 
         // #assert
     }

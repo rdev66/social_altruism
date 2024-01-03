@@ -4,7 +4,6 @@ import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
-import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.EnterPot;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
@@ -54,9 +53,10 @@ public class PotRoom {
                             Session.create(participants, totalTurns),
                             URLEncoder.encode(enterPot.replyTo().path().name(), UTF_8));
 
-            participant.tell(new SessionGranted(chatRoom, session.narrow()));
 
             // Communicate session start and share pot info with all participants
+            //Fishy, probably could spare one..
+            participants.forEach(p -> p.tell(new SessionGranted(chatRoom, session.narrow())));
             participants.forEach(p -> p.tell(new SessionStarted(chatRoom, session, participants, totalTurns)));
 
             return createPotBehaviour(chatRoom);
@@ -89,6 +89,7 @@ public class PotRoom {
 
     public static Behavior<PotRoomMessage> create(int numberOfParticipants, int totalTurns) {
         return Behaviors.setup(
-                ctx -> new PotRoom(ctx, numberOfParticipants, totalTurns).createPotBehaviour(ctx.getSelf()));
+                ctx -> new PotRoom(ctx, numberOfParticipants, totalTurns)
+                        .createPotBehaviour(ctx.getSelf()));
     }
 }

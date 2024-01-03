@@ -10,6 +10,10 @@ public class ParticipantProtocol {
     public interface ParticipantMessage {
     }
 
+    enum Timeout implements ParticipantMessage {
+        INSTANCE
+    }
+
     public record SessionGranted(
             ActorRef<PotRoomMessage> chatRoom,
             ActorRef<SessionMessage> session
