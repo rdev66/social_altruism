@@ -179,3 +179,4 @@ target
 .gradle
 README.html
 .exercism
+/target/
