@@ -1,20 +1,21 @@
 package dev.freireservices.social_altruism.chat.potroom;
 
-import static dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
-import static java.nio.charset.StandardCharsets.*;
-
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
-import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.*;
-import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
+import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.EnterPot;
+import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
 import lombok.Getter;
 
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
+
+import static dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Getter
 public class PotRoom {

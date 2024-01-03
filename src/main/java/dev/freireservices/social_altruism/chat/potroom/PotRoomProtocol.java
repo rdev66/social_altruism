@@ -2,9 +2,7 @@ package dev.freireservices.social_altruism.chat.potroom;
 
 import akka.actor.typed.ActorRef;
 
-import java.util.List;
-
-import static dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
+import static dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
 
 public class PotRoomProtocol {
   public interface PotRoomMessage {}

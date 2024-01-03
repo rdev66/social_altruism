@@ -1,18 +1,19 @@
 package dev.freireservices.social_altruism.chat;
 
-import static dev.freireservices.social_altruism.chat.participant.ParticipantType.*;
-
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.ActorSystem;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.Terminated;
 import akka.actor.typed.javadsl.Behaviors;
-import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
-import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.Participant;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.potroom.PotRoom;
+import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
+
 import java.util.ArrayList;
 import java.util.List;
+
+import static dev.freireservices.social_altruism.chat.participant.ParticipantType.*;
 
 public class PotQuickStart {
 

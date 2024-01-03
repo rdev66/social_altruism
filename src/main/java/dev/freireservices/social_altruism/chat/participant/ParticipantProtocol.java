@@ -1,9 +1,7 @@
 package dev.freireservices.social_altruism.chat.participant;
 
 import akka.actor.typed.ActorRef;
-import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
-import dev.freireservices.social_altruism.chat.potroom.SessionProtocol;
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
 
 import java.util.List;

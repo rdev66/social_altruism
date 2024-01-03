@@ -1,24 +1,22 @@
 package dev.freireservices.social_altruism.chat.participant;
 
-import static dev.freireservices.social_altruism.chat.participant.ParticipantType.*;
-import static dev.freireservices.social_altruism.chat.participant.ParticipantType.JUSTICIERO;
-
 import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
-
-import java.security.SecureRandom;
-import java.sql.Time;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol;
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
 import lombok.Getter;
 import lombok.Setter;
+
+import java.security.SecureRandom;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import static dev.freireservices.social_altruism.chat.participant.ParticipantType.JUSTICIERO;
+import static dev.freireservices.social_altruism.chat.participant.ParticipantType.SANTO;
 
 @Setter
 @Getter

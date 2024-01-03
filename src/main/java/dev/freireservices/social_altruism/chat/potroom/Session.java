@@ -4,7 +4,6 @@ import akka.actor.typed.ActorRef;
 import akka.actor.typed.Behavior;
 import akka.actor.typed.javadsl.ActorContext;
 import akka.actor.typed.javadsl.Behaviors;
-import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.PotReturned;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.SessionEnded;
