@@ -12,8 +12,8 @@ import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMe
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.*;
 import lombok.Getter;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 @Getter
 public class Session {
@@ -97,15 +97,8 @@ public class Session {
             context.getLog().info("Turn {} complete", getCurrentTurn());
 
             if (incrementCurrentTurnAndGet() == totalTurns) {
-                context.getLog().info("All turns completed");
-                context.getLog().info("Waiting for other messages, then ending session.");
-                try {
-                    TimeUnit.SECONDS.sleep(5);
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
-                playTurn.session().narrow().tell(new EndSession());
-
+                context.getLog().info("All turns completed - Waiting for other messages, then ending session.");
+                context.scheduleOnce(Duration.ofSeconds(3), playTurn.session().narrow(), new EndSession());
             }
         }
         return Behaviors.same();

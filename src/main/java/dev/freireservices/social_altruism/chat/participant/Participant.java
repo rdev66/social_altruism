@@ -50,8 +50,10 @@ public class Participant {
         return Behaviors.setup(ctx -> new Participant(ctx, initialCoins, participantType).behavior());
     }
 
-    public void decrementCoins(double coins) {
+    public double decrementCoins(double coins) {
         this.participantCoins -= coins;
+
+        return coins;
     }
 
     public void incrementCoins(double coins) {
@@ -94,12 +96,10 @@ public class Participant {
 
     private Behavior<ParticipantMessage> onSessionEnded(SessionEnded sessionEnded) {
 
-        context.getLog().info("Session ended for user {}", context.getSelf().path().name());
-
         context.getLog().info("Session ended for user: Stats: {}. Earned {} coins, profit {} %"
                 , context.getSelf().path().name()
-                , getParticipantCoins() - getInitialCoins()
-                , (getParticipantCoins() - getInitialCoins())
+                , String.format("%.3f%n", getParticipantCoins() - getInitialCoins())
+                , calculateProfit()
         );
         return Behaviors.stopped();
     }
@@ -128,7 +128,7 @@ public class Participant {
 
     private void playTurnWithSmallDelay(ActorRef<SessionMessage> replyTo) {
         if (getParticipantCoins() > 0 && getCurrentTurn() < getTotalTurns()) {
-            context.scheduleOnce(Duration.ofSeconds(5),
+            context.scheduleOnce(Duration.ofMillis(500),
                     replyTo,
                     new SessionProtocol.PlayTurn(
                             replyTo,
@@ -142,8 +142,7 @@ public class Participant {
 
     private double getParticipationForCurrentTurn() {
         var currentTurnCoins = getRandomNumberBetween(0, Math.floor(getParticipantCoins()));
-        decrementCoins(currentTurnCoins);
-        return currentTurnCoins;
+        return isCollaborateSwitch() ? decrementCoins(currentTurnCoins) : 0;
     }
 
     public static double getRandomNumberBetween(double min, double max) {
@@ -153,7 +152,7 @@ public class Participant {
 
     private Behavior<ParticipantMessage> onPotReturned(
             PotReturned potReturned) {
-        context.getLog().info("Pot returned: {} for participant {}", potReturned.returnedAmount(), potReturned.participant().path().name());
+        context.getLog().info("Pot returned: {} for participant {}", String.format("%.2f", potReturned.returnedAmount()), potReturned.participant().path().name());
         incrementCoins(potReturned.returnedAmount());
         incrementCurrentTurn();
         context
@@ -161,7 +160,7 @@ public class Participant {
                 .info(
                         "Player {} has now {} coins; started with {} for a partial profit of: {} %",
                         potReturned.participant().path().name(),
-                        getParticipantCoins(),
+                        String.format("%.3f", getParticipantCoins()),
                         getInitialCoins(),
                         calculateProfit());
 
@@ -200,8 +199,8 @@ public class Participant {
                 setCollaborateSwitch(false);
                 break;
             case JUSTICIERO:
-                // Tweak minimum amount to collaborate
-                setCollaborateSwitch(potReturned.returnedAmount() > participants.size());
+                // Tweak minimum amount to collaborate; average contribution must be at least the same.
+                setCollaborateSwitch((potReturned.returnedAmount() / participants.size() >= getParticipationForCurrentTurn()));
                 break;
         }
     }
