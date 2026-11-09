@@ -56,7 +56,9 @@ Parámetros de la simulación completa: **10 jugadores, 100 turnos, 100 monedas*
 
 ```bash
 mvn -q test
-mvn -q exec:java          # corre Simulacion → results/resultados.csv
+mvn -q exec:java          # Simulacion → results/resultados.csv
+mvn -q exec:java -Dexec.mainClass=dev.freireservices.social_altruism.trust.TrustSweep
+                          # → results/trust_grid.csv + trust_grid.json
 ```
 
 Demo corta (1 de cada tipo, 10 turnos):
@@ -65,9 +67,9 @@ Demo corta (1 de cada tipo, 10 turnos):
 mvn -q exec:java -Dexec.mainClass=dev.freireservices.social_altruism.chat.PotQuickStart
 ```
 
-(o invocar `PotQuickStart.main` desde el IDE).
+(o invocar `PotQuickStart.main` / `TrustSweep.main` desde el IDE).
 
-## Arquitectura
+## Arquitectura (v1 — bien público)
 
 - `PotRoom` — admite entradas (`EnterPot` + `ParticipantType`) hasta llenar el cupo; deniega duplicados (`Can only enter a pot once`) y cupo lleno (`Pot full`); spawnea `Session` con nombre fijo `session` y el mapa de tipos explícito.
 - `Session` — ledger de aportes/saldos (`aportadoTotal` / `recibidoTotal`); WARN ante `PlayTurn` incorrecto o duplicado; `PotReturned(turn, amount, contributions)`; al terminar pide saldo a cada jugador, compara con el libro (ERROR + `balanceOk=false` si no cuadra), envía `SessionEnded` y `GameResult`.
@@ -75,3 +77,48 @@ mvn -q exec:java -Dexec.mainClass=dev.freireservices.social_altruism.chat.PotQui
 - `Simulacion` — matriz de 66 composiciones vía `AskPattern`, CSV + tabla y conclusiones.
 
 Dependencia de actores: **Apache Pekko 1.1.x** (migración desde Akka por el repositorio autenticado `repo.akka.io`).
+
+## v2 — confianza y verificación
+
+Paquete `dev.freireservices.social_altruism.trust` (Java puro, sin Pekko). Motor determinista con `SplittableRandom`.
+
+**Pregunta:** al pagar a un contratista, ¿qué estrategia conviene según cuántos pícaros hay (`p`) y cuánto tarda en descubrirse un mal trabajo (`d`)?
+
+### Modelo (`TrustConfig`, supuestos — no son datos medidos)
+
+| Parámetro | Default | Rol |
+|-----------|---------|-----|
+| Rondas `T` | 50 | Horizonte |
+| Presupuesto `B` | 1000 | Tope de gasto del inversor |
+| HONESTO | entrega `1.3 ×` pagado | Valor recibido |
+| PÍCARO | entrega `0.3 ×` pagado | Valor recibido |
+| `p` | barrido | Prob. de que un contratista nuevo sea pícaro |
+| `d` | barrido | Retraso (rondas) hasta ver la calidad |
+| Verificación `c` | 2 | Coste por ronda verificada (`d=0` esa ronda) |
+| Cambio `s` | 10 | Coste + una ronda sin trabajo |
+| Ruido `ε` | 0.05 | Honesto entrega mal (y se ve mala) con prob. `ε` |
+
+Resultado del inversor = valor entregado − pagado − costes de verificación − costes de cambio.
+
+### Estrategias
+
+| Estrategia | Comportamiento |
+|------------|----------------|
+| **SANTO** | Paga 40/ronda; nunca cambia |
+| **JUSTICIERO** | Paga 40; al **ver** una mala, cambia |
+| **GRADUAL** | Empieza en 5; cada buena vista duplica (tope 40); mala → cambia y vuelve a 5 |
+| **VERIFICADOR** | Como GRADUAL + verifica siempre |
+| **VERIFICADOR_ESCALONADO** | Verifica solo hasta 5 buenas vistas; luego retraso normal |
+
+### Barrido (`TrustSweep`)
+
+`p ∈ [0, 0.80]` paso 0.05; `d ∈ [0, 10]`; 5 estrategias; 500 semillas/celda → `results/trust_grid.csv` y `results/trust_grid.json`.
+
+### Ganadoras en puntos de referencia (medias sobre 500 semillas)
+
+| Escenario | `p` | `d` | Interpretación | Ganadora |
+|-----------|----:|----:|----------------|----------|
+| Alta confianza | 0.05 | 1 | Pocos pícaros, feedback rápido | **empate** (GRADUAL mean≈231.1 ≈ JUSTICIERO≈228.8; gap &lt; 1 %) |
+| Sin instituciones | 0.40 | 6 | Muchos pícaros, feedback lento | **VERIFICADOR_ESCALONADO** (mean≈191.1; VERIFICADOR≈136.5; GRADUAL≈68.6) |
+
+Lectura breve: con poca corrupción y feedback rápido, confiar/graduar sin verificación cara empata; cuando hay muchos pícaros y el daño se ve tarde, verificar al principio (escalonado) domina.
