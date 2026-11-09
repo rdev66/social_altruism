@@ -1,25 +1,15 @@
 package dev.freireservices.social_altruism.chat.potroom;
 
-import akka.actor.typed.ActorRef;
+import org.apache.pekko.actor.typed.ActorRef;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
-import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
-import lombok.Getter;
 
 import java.util.List;
+import java.util.Map;
 
-@Getter
 public class SessionProtocol {
 
     public interface SessionMessage {
     }
-
-    public record StartSession(
-            ActorRef<PotRoomMessage> chatRoom,
-            ActorRef<SessionMessage> replyTo,
-            List<ActorRef<ParticipantMessage>> participants)
-            implements SessionMessage {
-    }
-
 
     public record PlayTurn(
             ActorRef<SessionMessage> session,
@@ -33,10 +23,17 @@ public class SessionProtocol {
     public record ShareReturnPotWithParticipants(
             ActorRef<SessionMessage> session,
             List<ActorRef<ParticipantMessage>> participants,
-            double returnedAmount) implements SessionMessage {
+            double returnedAmount,
+            int turn,
+            Map<ActorRef<ParticipantMessage>, Double> contributions)
+            implements SessionMessage {
     }
 
+    public record EndSession() implements SessionMessage {
+    }
 
-    public record EndSession() implements SessionMessage { }
-
+    /** Participant reports its local coin balance for ledger reconciliation. */
+    public record ReportBalance(ActorRef<ParticipantMessage> from, double coins)
+            implements SessionMessage {
+    }
 }

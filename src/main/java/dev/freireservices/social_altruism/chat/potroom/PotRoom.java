@@ -1,95 +1,116 @@
 package dev.freireservices.social_altruism.chat.potroom;
 
-import akka.actor.typed.ActorRef;
-import akka.actor.typed.Behavior;
-import akka.actor.typed.javadsl.ActorContext;
-import akka.actor.typed.javadsl.Behaviors;
+import dev.freireservices.social_altruism.chat.GameConfig;
+import dev.freireservices.social_altruism.chat.GameResult;
+import dev.freireservices.social_altruism.chat.participant.ParticipantType;
+import org.apache.pekko.actor.typed.ActorRef;
+import org.apache.pekko.actor.typed.Behavior;
+import org.apache.pekko.actor.typed.javadsl.ActorContext;
+import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.EnterPot;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMessage;
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
-import lombok.Getter;
 
-import java.net.URLEncoder;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
-@Getter
 public class PotRoom {
     private final ActorContext<PotRoomMessage> context;
     private final List<ActorRef<ParticipantMessage>> participants;
-
-    private final int totalTurns;
-    private final int numberOfParticipants;
+    private final Map<ActorRef<ParticipantMessage>, ParticipantType> knownTypes;
+    private final GameConfig config;
+    private final ActorRef<GameResult> resultRef;
+    private boolean started;
 
     private PotRoom(
             ActorContext<PotRoomMessage> context,
-            int numberOfParticipants,
-            int totalTurns) {
+            GameConfig config,
+            ActorRef<GameResult> resultRef) {
         this.context = context;
         this.participants = new ArrayList<>();
-        this.numberOfParticipants = numberOfParticipants;
-        this.totalTurns = totalTurns;
+        this.knownTypes = new LinkedHashMap<>();
+        this.config = config;
+        this.resultRef = resultRef;
+        this.started = false;
     }
 
-    private Behavior<PotRoomMessage> onGetPotSession(
-            ActorRef<PotRoomMessage> chatRoom, EnterPot enterPot) {
+    private Behavior<PotRoomMessage> onEnterPot(EnterPot enterPot) {
+        if (!validate(enterPot)) {
+            return Behaviors.same();
+        }
 
-        validate(enterPot);
+        if (enterPot.type() == null) {
+            throw new IllegalStateException(
+                    "Missing ParticipantType for " + enterPot.replyTo().path().name());
+        }
 
         context.getLog().info("Participant joined {} pot", enterPot.replyTo().path().name());
 
-        ActorRef<ParticipantMessage> participant = enterPot.replyTo();
+        participants.add(enterPot.replyTo());
+        knownTypes.put(enterPot.replyTo(), enterPot.type());
 
-        participants.add(participant);
-
-        if (getNumberOfParticipants() == participants.size()) {
+        if (config.jugadores() == participants.size()) {
             context.getLog().info("All participants joined; pot is ready to start.");
+            started = true;
 
             ActorRef<SessionMessage> session =
                     context.spawn(
-                            Session.create(participants, totalTurns),
-                            URLEncoder.encode(enterPot.replyTo().path().name(), UTF_8));
+                            Session.create(
+                                    config,
+                                    List.copyOf(participants),
+                                    Map.copyOf(knownTypes),
+                                    resultRef),
+                            "session");
 
+            participants.forEach(p -> p.tell(new SessionGranted(context.getSelf(), session.narrow())));
+            participants.forEach(
+                    p ->
+                            p.tell(
+                                    new SessionStarted(
+                                            context.getSelf(),
+                                            session,
+                                            List.copyOf(participants),
+                                            config)));
 
-            // Communicate session start and share pot info with all participants
-            //Fishy, probably could spare one..
-            participants.forEach(p -> p.tell(new SessionGranted(chatRoom, session.narrow())));
-            participants.forEach(p -> p.tell(new SessionStarted(chatRoom, session, participants, totalTurns)));
-
-            return createPotBehaviour(chatRoom);
-        } else {
-            // Waiting for more participants
-            context.getLog().info("Waiting for {} more participant(s).", numberOfParticipants - participants.size());
             return Behaviors.same();
         }
+
+        context.getLog()
+                .info(
+                        "Waiting for {} more participant(s).",
+                        config.jugadores() - participants.size());
+        return Behaviors.same();
     }
 
-    private void validate(EnterPot enterPot) {
-        // Add check session started
-        if (participants.stream()
-                .anyMatch(
-                        s ->
-                                s.path()
-                                        .name()
-                                        .equals(URLEncoder.encode(enterPot.replyTo().path().name(), UTF_8)))) {
-
-            enterPot.replyTo().tell(new SessionDenied("Can only enter a pot once"));
+    /**
+     * @return true if the participant may join
+     */
+    private boolean validate(EnterPot enterPot) {
+        if (started || participants.size() >= config.jugadores()) {
+            enterPot.replyTo().tell(new SessionDenied("Pot full"));
+            return false;
         }
+
+        if (participants.stream().anyMatch(p -> p.equals(enterPot.replyTo()))) {
+            enterPot.replyTo().tell(new SessionDenied("Can only enter a pot once"));
+            return false;
+        }
+
+        return true;
     }
 
-
-    private Behavior<PotRoomMessage> createPotBehaviour(ActorRef<PotRoomMessage> chatRoom) {
+    private Behavior<PotRoomMessage> behavior() {
         return Behaviors.receive(PotRoomMessage.class)
-                .onMessage(EnterPot.class, x -> onGetPotSession(chatRoom, x))
+                .onMessage(EnterPot.class, this::onEnterPot)
                 .build();
     }
 
-    public static Behavior<PotRoomMessage> create(int numberOfParticipants, int totalTurns) {
-        return Behaviors.setup(
-                ctx -> new PotRoom(ctx, numberOfParticipants, totalTurns)
-                        .createPotBehaviour(ctx.getSelf()));
+    public static Behavior<PotRoomMessage> create(
+            GameConfig config, ActorRef<GameResult> resultRef) {
+        return Behaviors.setup(ctx -> new PotRoom(ctx, config, resultRef).behavior());
     }
 }
