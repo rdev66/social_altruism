@@ -119,6 +119,6 @@ Resultado del inversor = valor entregado − pagado − costes de verificación 
 | Escenario | `p` | `d` | Interpretación | Ganadora |
 |-----------|----:|----:|----------------|----------|
 | Alta confianza | 0.05 | 1 | Pocos pícaros, feedback rápido | **empate** (GRADUAL mean≈231.1 ≈ JUSTICIERO≈228.8; gap &lt; 1 %) |
-| Sin instituciones | 0.40 | 6 | Muchos pícaros, feedback lento | **VERIFICADOR_ESCALONADO** (mean≈191.1; VERIFICADOR≈136.5; GRADUAL≈68.6) |
+| Sin instituciones | 0.40 | 6 | Muchos pícaros, feedback lento | **VERIFICADOR_ESCALONADO** (mean≈191.3; GRADUAL≈160.5; VERIFICADOR≈136.5) |
 
-Lectura breve: con poca corrupción y feedback rápido, confiar/graduar sin verificación cara empata; cuando hay muchos pícaros y el daño se ve tarde, verificar al principio (escalonado) domina.
+**Lectura:** gradual gana en la mayor parte del mapa; verificar al principio (VERIFICADOR_ESCALONADO) compensa cuando el retraso es grande. Las observaciones llevan `contractorId` para no reaccionar a entregas tardías del contratista anterior tras un cambio.

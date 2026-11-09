@@ -31,6 +31,25 @@ public final class Strategies {
         return new Gradual(true, true);
     }
 
+    /** Test helper: current gradual pay level. */
+    public static double currentPay(PaymentStrategy strategy) {
+        if (strategy instanceof Gradual g) {
+            return g.currentPay();
+        }
+        throw new IllegalArgumentException("Not a gradual strategy: " + strategy.name());
+    }
+
+    /** Test helper: strategy's current contractor id. */
+    public static int currentContractorId(PaymentStrategy strategy) {
+        if (strategy instanceof Justiciero j) {
+            return j.currentContractorId();
+        }
+        if (strategy instanceof Gradual g) {
+            return g.currentContractorId();
+        }
+        throw new IllegalArgumentException("Strategy has no contractor id: " + strategy.name());
+    }
+
     private static final class Santo implements PaymentStrategy {
         private double pay;
 
@@ -58,6 +77,7 @@ public final class Strategies {
     private static final class Justiciero implements PaymentStrategy {
         private double pay;
         private boolean switchNext;
+        private int currentContractorId;
 
         @Override
         public String name() {
@@ -68,12 +88,19 @@ public final class Strategies {
         public void reset(TrustConfig config) {
             this.pay = config.fixedPay();
             this.switchNext = false;
+            this.currentContractorId = 0;
         }
 
         @Override
         public void onObservations(ObservationBatch batch) {
-            if (batch.anyBad()) {
-                switchNext = true;
+            for (Observation o : batch.items()) {
+                if (o.contractorId() != currentContractorId) {
+                    continue; // stale — previous contractor
+                }
+                if (o.bad()) {
+                    switchNext = true;
+                    return;
+                }
             }
         }
 
@@ -81,9 +108,15 @@ public final class Strategies {
         public Decision decide(int round, double budgetRemaining) {
             if (switchNext) {
                 switchNext = false;
+                currentContractorId++;
                 return Decision.switchOnly();
             }
             return Decision.work(pay, false);
+        }
+
+        /** Test hook: pay level is fixed; expose contractor id via package helpers if needed. */
+        int currentContractorId() {
+            return currentContractorId;
         }
     }
 
@@ -101,6 +134,7 @@ public final class Strategies {
         private double pay;
         private int goodSeenOnContractor;
         private boolean switchNext;
+        private int currentContractorId;
 
         Gradual(boolean alwaysVerify, boolean escalate) {
             this.alwaysVerify = alwaysVerify;
@@ -121,11 +155,15 @@ public final class Strategies {
             this.pay = config.gradualStart();
             this.goodSeenOnContractor = 0;
             this.switchNext = false;
+            this.currentContractorId = 0;
         }
 
         @Override
         public void onObservations(ObservationBatch batch) {
             for (Observation o : batch.items()) {
+                if (o.contractorId() != currentContractorId) {
+                    continue; // stale — previous contractor
+                }
                 if (o.bad()) {
                     switchNext = true;
                     return;
@@ -141,6 +179,7 @@ public final class Strategies {
                 switchNext = false;
                 pay = config.gradualStart();
                 goodSeenOnContractor = 0;
+                currentContractorId++;
                 return Decision.switchOnly();
             }
             boolean verify;
@@ -152,6 +191,14 @@ public final class Strategies {
                 verify = goodSeenOnContractor < config.verifyUntilGoodDeliveries();
             }
             return Decision.work(pay, verify);
+        }
+
+        double currentPay() {
+            return pay;
+        }
+
+        int currentContractorId() {
+            return currentContractorId;
         }
     }
 }

@@ -29,6 +29,7 @@ public final class TrustEngine {
         double verifyCosts = 0;
         double switchCosts = 0;
 
+        int contractorId = 0;
         boolean contractorPicaro = drawPicaro(config, rng);
         Map<Integer, List<PaymentStrategy.Observation>> pending = new HashMap<>();
 
@@ -44,6 +45,7 @@ public final class TrustEngine {
                 double cost = Math.min(config.switchCost(), budget);
                 budget -= cost;
                 switchCosts += cost;
+                contractorId++;
                 contractorPicaro = drawPicaro(config, rng);
                 continue; // round without work
             }
@@ -72,11 +74,10 @@ public final class TrustEngine {
             totalValue += value;
 
             PaymentStrategy.Observation obs =
-                    new PaymentStrategy.Observation(t, bad, pay, value);
+                    new PaymentStrategy.Observation(t, bad, pay, value, contractorId);
 
-            // Verified rounds use d=0. Deliveries are visible in round t+d (d=0 → this round).
-            // Decisions already ran for this round, so same-round reveals update strategy state
-            // for the next round's decide().
+            // Verified rounds use d=0. Same-round reveals update strategy state for the next
+            // decide(); delayed reveals are queued by reveal round.
             int revealAt = verified ? t : t + config.delay();
             if (revealAt <= t) {
                 strategy.onObservations(

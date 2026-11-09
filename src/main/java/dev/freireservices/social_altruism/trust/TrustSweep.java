@@ -32,6 +32,7 @@ public class TrustSweep {
 
         printReference(sweep, 0.05, 1, "alta confianza");
         printReference(sweep, 0.40, 6, "sin instituciones");
+        printWinnerMatrix(sweep);
         System.out.printf(Locale.ROOT, "TrustSweep wall-clock: %d ms%n", ms);
         System.out.println("Wrote " + outDir.resolve("trust_grid.csv").toAbsolutePath());
         System.out.println("Wrote " + outDir.resolve("trust_grid.json").toAbsolutePath());
@@ -165,6 +166,36 @@ public class TrustSweep {
                     sweep.p90()[si][pi][di],
                     sweep.lossRate()[si][pi][di]);
         }
+    }
+
+    static void printWinnerMatrix(SweepResult sweep) {
+        System.out.println();
+        System.out.println("Winner matrix (rows=p, cols=d):");
+        System.out.print("p\\\\d");
+        for (int d : sweep.d()) {
+            System.out.printf(Locale.ROOT, "\t%d", d);
+        }
+        System.out.println();
+        for (int pi = 0; pi < sweep.p().length; pi++) {
+            System.out.printf(Locale.ROOT, "%.2f", sweep.p()[pi]);
+            for (int di = 0; di < sweep.d().length; di++) {
+                System.out.print('\t');
+                System.out.print(shortName(sweep.winner()[pi][di]));
+            }
+            System.out.println();
+        }
+    }
+
+    private static String shortName(String winner) {
+        return switch (winner) {
+            case "SANTO" -> "SAN";
+            case "JUSTICIERO" -> "JUS";
+            case "GRADUAL" -> "GRA";
+            case "VERIFICADOR" -> "VER";
+            case "VERIFICADOR_ESCALONADO" -> "VES";
+            case "empate" -> "EMP";
+            default -> winner;
+        };
     }
 
     private static int indexOf(double[] xs, double target) {
