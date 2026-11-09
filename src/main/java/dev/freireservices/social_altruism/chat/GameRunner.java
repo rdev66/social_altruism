@@ -13,7 +13,9 @@ import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.TimeUnit;
 
@@ -78,36 +80,50 @@ public final class GameRunner {
 
                                                 List<ActorRef<ParticipantMessage>> players =
                                                         new ArrayList<>();
+                                                Map<ActorRef<ParticipantMessage>, ParticipantType>
+                                                        types = new LinkedHashMap<>();
                                                 int idx = 0;
                                                 for (int i = 0; i < composition.picaros(); i++) {
-                                                    players.add(
+                                                    ActorRef<ParticipantMessage> ref =
                                                             context.spawn(
                                                                     Participant.create(
                                                                             config,
                                                                             ParticipantType.PICARO),
-                                                                    "PICARO-" + (idx++)));
+                                                                    "PICARO-" + (idx++));
+                                                    players.add(ref);
+                                                    types.put(ref, ParticipantType.PICARO);
                                                 }
                                                 for (int i = 0; i < composition.santos(); i++) {
-                                                    players.add(
+                                                    ActorRef<ParticipantMessage> ref =
                                                             context.spawn(
                                                                     Participant.create(
                                                                             config,
                                                                             ParticipantType.SANTO),
-                                                                    "SANTO-" + (idx++)));
+                                                                    "SANTO-" + (idx++));
+                                                    players.add(ref);
+                                                    types.put(ref, ParticipantType.SANTO);
                                                 }
                                                 for (int i = 0; i < composition.justicieros(); i++) {
-                                                    players.add(
+                                                    ActorRef<ParticipantMessage> ref =
                                                             context.spawn(
                                                                     Participant.create(
                                                                             config,
                                                                             ParticipantType
                                                                                     .JUSTICIERO),
-                                                                    "JUSTICIERO-" + (idx++)));
+                                                                    "JUSTICIERO-" + (idx++));
+                                                    players.add(ref);
+                                                    types.put(ref, ParticipantType.JUSTICIERO);
                                                 }
 
                                                 for (ActorRef<ParticipantMessage> p : players) {
+                                                    ParticipantType type = types.get(p);
+                                                    if (type == null) {
+                                                        throw new IllegalStateException(
+                                                                "Missing ParticipantType for "
+                                                                        + p.path().name());
+                                                    }
                                                     potRoom.tell(
-                                                            new PotRoomProtocol.EnterPot(p));
+                                                            new PotRoomProtocol.EnterPot(p, type));
                                                 }
                                                 return Behaviors.same();
                                             })

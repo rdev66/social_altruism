@@ -82,8 +82,15 @@ public class Participant {
     private Behavior<ParticipantMessage> started() {
         return Behaviors.receive(ParticipantMessage.class)
                 .onMessage(PotReturned.class, this::onPotReturned)
+                .onMessage(RequestFinalBalance.class, this::onRequestFinalBalance)
                 .onMessage(SessionEnded.class, this::onSessionEnded)
                 .build();
+    }
+
+    private Behavior<ParticipantMessage> onRequestFinalBalance(RequestFinalBalance request) {
+        request.session()
+                .tell(new SessionProtocol.ReportBalance(context.getSelf(), participantCoins));
+        return Behaviors.same();
     }
 
     private Behavior<ParticipantMessage> onSessionEnded(SessionEnded sessionEnded) {

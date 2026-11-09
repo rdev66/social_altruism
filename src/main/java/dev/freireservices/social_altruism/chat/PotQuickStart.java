@@ -25,6 +25,15 @@ public class PotQuickStart {
                 .forEach(
                         p ->
                                 System.out.println(
-                                        "  " + p.name() + " (" + p.type() + ") -> " + p.finalCoins()));
+                                        "  "
+                                                + p.name()
+                                                + " ("
+                                                + p.type()
+                                                + ") -> "
+                                                + p.finalCoins()
+                                                + " aportado="
+                                                + p.aportadoTotal()
+                                                + " recibido="
+                                                + p.recibidoTotal()));
     }
 }

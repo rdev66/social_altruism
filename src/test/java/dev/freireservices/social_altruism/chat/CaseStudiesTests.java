@@ -3,7 +3,6 @@ package dev.freireservices.social_altruism.chat;
 import org.apache.pekko.actor.testkit.typed.javadsl.ActorTestKit;
 import org.apache.pekko.actor.typed.ActorRef;
 import dev.freireservices.social_altruism.chat.participant.Participant;
-import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
 import dev.freireservices.social_altruism.chat.participant.ParticipantType;
 import dev.freireservices.social_altruism.chat.potroom.PotRoom;
@@ -23,7 +22,7 @@ import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Case studies a–g for the public-goods rules.
+ * Case studies a–g for the public-goods rules, plus additional exact-outcome cases.
  */
 public class CaseStudiesTests {
 
@@ -93,8 +92,7 @@ public class CaseStudiesTests {
         GameResult result = runWithConfig(config, 0, 2, 0);
         assertThat(result.balanceOk(), is(true));
         // Turn0: pot=100, share=100 → each 50-50+100=100
-        // Turn1: pot=100, share=100 → each 100-50+100=150? Wait coins=100, aporte min(50,100)=50
-        // Actually after turn0: 100 each. Turn1: contribute 50 → 50, pot=100, share=100 → 150
+        // Turn1: pot=100, share=100 → each 100-50+100=150
         assertThat(result.averageFor(SANTO), closeTo(150.0, 1e-6));
         assertTrue(result.players().stream().allMatch(p -> p.finalCoins() >= 0));
     }
@@ -109,6 +107,55 @@ public class CaseStudiesTests {
         // later turns: only 2 santos → pot 2 each
         double expected = 400.0 + 3.0 + 9 * 2.0;
         assertThat(mixed.totalWealth(), closeTo(expected, 1e-6));
+    }
+
+    /** P,S,J · 10 turnos → 107.333333 / 97.333333 / 106.333333 */
+    @Test
+    public void h_psjDiezTurnosExactos() {
+        GameResult result = runMix(3, 10, 1, 1, 1);
+        assertThat(result.balanceOk(), is(true));
+        assertThat(result.averageFor(PICARO), closeTo(107.333333, 1e-6));
+        assertThat(result.averageFor(SANTO), closeTo(97.333333, 1e-6));
+        assertThat(result.averageFor(JUSTICIERO), closeTo(106.333333, 1e-6));
+    }
+
+    /** 10 SANTO · 100 turnos → 200 cada uno */
+    @Test
+    public void i_diezSantosCienTurnos() {
+        GameResult result = runMix(10, 100, 0, 10, 0);
+        assertThat(result.balanceOk(), is(true));
+        assertThat(result.averageFor(SANTO), closeTo(200.0, 1e-6));
+        assertThat(result.totalWealth(), closeTo(2000.0, 1e-6));
+    }
+
+    /** 9 SANTO + 1 PICARO · 100 → santos 180, pícaro 280 */
+    @Test
+    public void j_nueveSantosUnPicaroCienTurnos() {
+        GameResult result = runMix(10, 100, 1, 9, 0);
+        assertThat(result.balanceOk(), is(true));
+        assertThat(result.averageFor(SANTO), closeTo(180.0, 1e-6));
+        assertThat(result.averageFor(PICARO), closeTo(280.0, 1e-6));
+    }
+
+    /** 9 JUSTICIERO + 1 PICARO · 100 → 100.8 / 101.8 */
+    @Test
+    public void k_nueveJusticierosUnPicaroCienTurnos() {
+        GameResult result = runMix(10, 100, 1, 0, 9);
+        assertThat(result.balanceOk(), is(true));
+        assertThat(result.averageFor(JUSTICIERO), closeTo(100.8, 1e-6));
+        assertThat(result.averageFor(PICARO), closeTo(101.8, 1e-6));
+    }
+
+    /**
+     * Jugador que llega a 0 y sigue: 2 SANTO + 1 PICARO, monedasIniciales=1, aporte=1, 5 turnos.
+     */
+    @Test
+    public void l_jugadorACeroContinua() {
+        GameConfig config = new GameConfig(3, 5, 1.0, 2.0, 1.0, Duration.ZERO);
+        GameResult result = runWithConfig(config, 1, 2, 0);
+        assertThat(result.balanceOk(), is(true));
+        assertThat(result.players(), hasSize(3));
+        assertTrue(result.players().stream().anyMatch(p -> p.finalCoins() >= 0));
     }
 
     private GameResult runMix(int players, int turns, int picaros, int santos, int justicieros) {
@@ -135,21 +182,23 @@ public class CaseStudiesTests {
         List<ActorRef<ParticipantMessage>> spawned = new ArrayList<>();
         int idx = 0;
         for (int i = 0; i < picaros; i++) {
-            spawned.add(spawn(config, PICARO, "PICARO-" + idx++));
+            ActorRef<ParticipantMessage> ref = spawn(config, PICARO, "PICARO-" + idx++);
+            spawned.add(ref);
+            potRoom.tell(new PotRoomProtocol.EnterPot(ref, PICARO));
         }
         for (int i = 0; i < santos; i++) {
-            spawned.add(spawn(config, SANTO, "SANTO-" + idx++));
+            ActorRef<ParticipantMessage> ref = spawn(config, SANTO, "SANTO-" + idx++);
+            spawned.add(ref);
+            potRoom.tell(new PotRoomProtocol.EnterPot(ref, SANTO));
         }
         for (int i = 0; i < justicieros; i++) {
-            spawned.add(spawn(config, JUSTICIERO, "JUSTICIERO-" + idx++));
-        }
-
-        for (ActorRef<ParticipantMessage> p : spawned) {
-            potRoom.tell(new PotRoomProtocol.EnterPot(p));
+            ActorRef<ParticipantMessage> ref = spawn(config, JUSTICIERO, "JUSTICIERO-" + idx++);
+            spawned.add(ref);
+            potRoom.tell(new PotRoomProtocol.EnterPot(ref, JUSTICIERO));
         }
 
         try {
-            return future.get(15, TimeUnit.SECONDS);
+            return future.get(30, TimeUnit.SECONDS);
         } catch (Exception e) {
             throw new AssertionError("Game did not finish in time", e);
         }

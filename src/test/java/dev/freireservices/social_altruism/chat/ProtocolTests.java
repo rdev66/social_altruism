@@ -3,15 +3,23 @@ package dev.freireservices.social_altruism.chat;
 import org.apache.pekko.actor.testkit.typed.javadsl.ActorTestKit;
 import org.apache.pekko.actor.testkit.typed.javadsl.TestProbe;
 import org.apache.pekko.actor.typed.ActorRef;
+import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import dev.freireservices.social_altruism.chat.participant.Participant;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.PotReturned;
+import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.RequestFinalBalance;
+import dev.freireservices.social_altruism.chat.participant.ParticipantType;
 import dev.freireservices.social_altruism.chat.potroom.PotRoom;
 import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol;
+import dev.freireservices.social_altruism.chat.potroom.Session;
+import dev.freireservices.social_altruism.chat.potroom.SessionProtocol;
 import org.junit.After;
 import org.junit.Test;
 
 import java.time.Duration;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -19,6 +27,7 @@ import static dev.freireservices.social_altruism.chat.participant.ParticipantTyp
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 public class ProtocolTests {
 
@@ -53,10 +62,10 @@ public class ProtocolTests {
         ActorRef<ParticipantMessage> p3 =
                 testKit.spawn(Participant.create(config, SANTO), "SANTO-1");
 
-        potRoom.tell(new PotRoomProtocol.EnterPot(p1));
-        potRoom.tell(new PotRoomProtocol.EnterPot(p2));
-        potRoom.tell(new PotRoomProtocol.EnterPot(p3));
-        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref()));
+        potRoom.tell(new PotRoomProtocol.EnterPot(p1, PICARO));
+        potRoom.tell(new PotRoomProtocol.EnterPot(p2, JUSTICIERO));
+        potRoom.tell(new PotRoomProtocol.EnterPot(p3, SANTO));
+        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref(), SANTO));
 
         probe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(5));
         ParticipantProtocol.SessionStarted started =
@@ -64,10 +73,6 @@ public class ProtocolTests {
                         ParticipantProtocol.SessionStarted.class, Duration.ofSeconds(5));
         assertThat(started.participants(), hasSize(4));
         assertEquals(config.turnos(), started.config().turnos());
-
-        // Probe is not a Participant actor — drain pot return / end if any, then wait for result
-        // from real participants finishing; probe won't play turns so game won't finish.
-        // Only protocol join messages are under test here.
     }
 
     @Test
@@ -81,7 +86,7 @@ public class ProtocolTests {
         ActorRef<PotRoomProtocol.PotRoomMessage> potRoom =
                 testKit.spawn(PotRoom.create(config, sink), "chatRoom");
 
-        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref()));
+        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref(), SANTO));
 
         probe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(5));
         probe.expectMessageClass(ParticipantProtocol.SessionStarted.class, Duration.ofSeconds(5));
@@ -98,8 +103,8 @@ public class ProtocolTests {
         ActorRef<PotRoomProtocol.PotRoomMessage> potRoom =
                 testKit.spawn(PotRoom.create(config, sink), "chatRoom");
 
-        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref()));
-        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref()));
+        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref(), SANTO));
+        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref(), SANTO));
 
         ParticipantProtocol.SessionDenied denied =
                 probe.expectMessageClass(
@@ -123,58 +128,141 @@ public class ProtocolTests {
                 testKit.spawn(Participant.create(config, SANTO), "SANTO-2");
         TestProbe<ParticipantMessage> late = testKit.createTestProbe("late");
 
-        potRoom.tell(new PotRoomProtocol.EnterPot(p1));
-        potRoom.tell(new PotRoomProtocol.EnterPot(p2));
+        potRoom.tell(new PotRoomProtocol.EnterPot(p1, SANTO));
+        potRoom.tell(new PotRoomProtocol.EnterPot(p2, SANTO));
 
-        // Wait until session finishes so pot is definitely started/full
         GameResult result = future.get(10, TimeUnit.SECONDS);
         assertThat(result.balanceOk(), is(true));
 
-        potRoom.tell(new PotRoomProtocol.EnterPot(late.ref()));
+        potRoom.tell(new PotRoomProtocol.EnterPot(late.ref(), SANTO));
         ParticipantProtocol.SessionDenied denied =
                 late.expectMessageClass(
                         ParticipantProtocol.SessionDenied.class, Duration.ofSeconds(5));
         assertEquals("Pot full", denied.reason());
     }
 
+    /**
+     * TestProbe acts as a participant and verifies PotReturned.contributions has one entry per
+     * player with their aporte.
+     */
     @Test
-    public void potReturnedIncludesContributionMap() throws Exception {
+    public void potReturnedIncludesContributionMap() {
         testKit = ActorTestKit.create();
         GameConfig config = new GameConfig(2, 1);
         CompletableFuture<GameResult> future = new CompletableFuture<>();
         ActorRef<GameResult> sink = spawnSink(future);
 
         TestProbe<ParticipantMessage> probe =
-                testKit.createTestProbe("observer", ParticipantMessage.class);
+                testKit.createTestProbe("probe-player", ParticipantMessage.class);
 
-        // Use a 3-player pot: 2 real + probe that will not contribute → hang.
-        // Instead intercept via a custom participant? Simpler: assert via finished GameResult.
         ActorRef<PotRoomProtocol.PotRoomMessage> potRoom =
                 testKit.spawn(PotRoom.create(config, sink), "potRoom");
 
         ActorRef<ParticipantMessage> santo =
                 testKit.spawn(Participant.create(config, SANTO), "SANTO-0");
-        ActorRef<ParticipantMessage> picaro =
-                testKit.spawn(Participant.create(config, PICARO), "PICARO-0");
 
-        potRoom.tell(new PotRoomProtocol.EnterPot(santo));
-        potRoom.tell(new PotRoomProtocol.EnterPot(picaro));
+        potRoom.tell(new PotRoomProtocol.EnterPot(santo, SANTO));
+        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref(), PICARO));
+
+        probe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(5));
+        ParticipantProtocol.SessionStarted started =
+                probe.expectMessageClass(
+                        ParticipantProtocol.SessionStarted.class, Duration.ofSeconds(5));
+
+        started
+                .replyTo()
+                .tell(
+                        new SessionProtocol.PlayTurn(
+                                started.replyTo(),
+                                probe.ref(),
+                                started.participants(),
+                                0,
+                                0.0));
+
+        PotReturned potReturned =
+                probe.expectMessageClass(PotReturned.class, Duration.ofSeconds(5));
+        assertThat(potReturned.contributions().size(), is(2));
+        assertThat(potReturned.contributions(), hasKey(santo));
+        assertThat(potReturned.contributions(), hasKey(probe.ref()));
+        assertThat(potReturned.contributions().get(santo), closeTo(1.0, 1e-6));
+        assertThat(potReturned.contributions().get(probe.ref()), closeTo(0.0, 1e-6));
+
+        RequestFinalBalance request =
+                probe.expectMessageClass(RequestFinalBalance.class, Duration.ofSeconds(5));
+        // Pícaro: 100 − 0 + share(1) = 101
+        request.session().tell(new SessionProtocol.ReportBalance(probe.ref(), 101.0));
+
+        probe.expectMessageClass(ParticipantProtocol.SessionEnded.class, Duration.ofSeconds(5));
+    }
+
+    /** PlayTurn with wrong turn is ignored — ledger balance does not change. */
+    @Test
+    public void playTurnWrongTurnIgnored() throws Exception {
+        testKit = ActorTestKit.create();
+        GameConfig config = new GameConfig(1, 1, 100.0, 2.0, 1.0, Duration.ZERO);
+        CompletableFuture<GameResult> future = new CompletableFuture<>();
+        ActorRef<GameResult> sink = spawnSink(future);
+
+        TestProbe<ParticipantMessage> probe = testKit.createTestProbe("solo");
+        ActorRef<PotRoomProtocol.PotRoomMessage> potRoom =
+                testKit.spawn(PotRoom.create(config, sink), "potRoom");
+        potRoom.tell(new PotRoomProtocol.EnterPot(probe.ref(), SANTO));
+
+        probe.expectMessageClass(ParticipantProtocol.SessionGranted.class, Duration.ofSeconds(5));
+        ParticipantProtocol.SessionStarted started =
+                probe.expectMessageClass(
+                        ParticipantProtocol.SessionStarted.class, Duration.ofSeconds(5));
+
+        ActorRef<SessionProtocol.SessionMessage> session = started.replyTo();
+
+        session.tell(
+                new SessionProtocol.PlayTurn(
+                        session, probe.ref(), started.participants(), 99, 50.0));
+
+        session.tell(
+                new SessionProtocol.PlayTurn(
+                        session, probe.ref(), started.participants(), 0, 1.0));
+
+        PotReturned potReturned =
+                probe.expectMessageClass(PotReturned.class, Duration.ofSeconds(5));
+        assertThat(potReturned.returnedAmount(), closeTo(2.0, 1e-6));
+        assertThat(potReturned.contributions().get(probe.ref()), closeTo(1.0, 1e-6));
+
+        RequestFinalBalance request =
+                probe.expectMessageClass(RequestFinalBalance.class, Duration.ofSeconds(5));
+        request.session().tell(new SessionProtocol.ReportBalance(probe.ref(), 101.0));
 
         GameResult result = future.get(10, TimeUnit.SECONDS);
         assertThat(result.balanceOk(), is(true));
-        // 1 turn: pot=1, share=1 → santo 100, picaro 101
-        assertThat(result.averageFor(SANTO), closeTo(100.0, 1e-6));
-        assertThat(result.averageFor(PICARO), closeTo(101.0, 1e-6));
-        // probe unused — keep test focused on settlement math
-        assertThat(probe.ref(), notNullValue());
+        assertThat(result.players().get(0).finalCoins(), closeTo(101.0, 1e-6));
+    }
+
+    /** Tipo sin registrar → IllegalStateException. */
+    @Test
+    public void tipoSinRegistrarLanzaExcepcion() {
+        testKit = ActorTestKit.create();
+        GameConfig config = new GameConfig(1, 1);
+        TestProbe<ParticipantMessage> probe = testKit.createTestProbe("orphan");
+        TestProbe<GameResult> sink = testKit.createTestProbe("sink");
+
+        Map<ActorRef<ParticipantMessage>, ParticipantType> emptyTypes = Map.of();
+        List<ActorRef<ParticipantMessage>> participants = List.of(probe.ref());
+
+        IllegalStateException ex =
+                assertThrows(
+                        IllegalStateException.class,
+                        () ->
+                                new Session(
+                                        null, config, participants, emptyTypes, sink.ref()));
+        assertThat(ex.getMessage(), containsString("Missing ParticipantType"));
     }
 
     private ActorRef<GameResult> spawnSink(CompletableFuture<GameResult> future) {
         return testKit.spawn(
-                org.apache.pekko.actor.typed.javadsl.Behaviors.<GameResult>receive(
+                Behaviors.<GameResult>receive(
                         (ctx, msg) -> {
                             future.complete(msg);
-                            return org.apache.pekko.actor.typed.javadsl.Behaviors.same();
+                            return Behaviors.same();
                         }),
                 "result-sink-" + System.nanoTime());
     }

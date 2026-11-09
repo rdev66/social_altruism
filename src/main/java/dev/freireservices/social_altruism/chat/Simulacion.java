@@ -58,21 +58,36 @@ public class Simulacion {
     private static void writeCsv(Path csv, List<Row> rows) throws IOException {
         try (PrintWriter pw = new PrintWriter(Files.newBufferedWriter(csv, StandardCharsets.UTF_8))) {
             pw.println(
-                    "picaros,santos,justicieros,avg_picaro,avg_santo,avg_justiciero,total_wealth,balance_ok");
+                    "picaros,santos,justicieros,avg_picaro,avg_santo,avg_justiciero,total_wealth,bienestar_vs_inicial_pct,balance_ok");
             for (Row r : rows) {
                 pw.printf(
                         Locale.ROOT,
-                        "%d,%d,%d,%.4f,%.4f,%.4f,%.4f,%s%n",
+                        "%d,%d,%d,%s,%s,%s,%.4f,%.4f,%s%n",
                         r.picaros(),
                         r.santos(),
                         r.justicieros(),
-                        r.avgPicaro(),
-                        r.avgSanto(),
-                        r.avgJusticiero(),
+                        fmtOptional(r.avgPicaro()),
+                        fmtOptional(r.avgSanto()),
+                        fmtOptional(r.avgJusticiero()),
                         r.totalWealth(),
+                        r.bienestarVsInicialPct(),
                         r.balanceOk());
             }
         }
+    }
+
+    private static String fmtOptional(Double value) {
+        if (value == null) {
+            return "";
+        }
+        return String.format(Locale.ROOT, "%.4f", value);
+    }
+
+    private static String displayOptional(Double value) {
+        if (value == null) {
+            return "—";
+        }
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 
     private static void printTable(List<Row> rows) {
@@ -80,14 +95,15 @@ public class Simulacion {
         System.out.println("=== Selected compositions (10 players, 100 turns, 100 coins) ===");
         System.out.printf(
                 Locale.ROOT,
-                "%-8s %-8s %-11s %12s %12s %14s %12s%n",
+                "%-8s %-8s %-11s %12s %12s %14s %12s %10s%n",
                 "Picaros",
                 "Santos",
                 "Justicieros",
                 "avgPicaro",
                 "avgSanto",
                 "avgJusticiero",
-                "totalWealth");
+                "totalWealth",
+                "bienestar%");
 
         List<Composition> highlights =
                 List.of(
@@ -110,14 +126,15 @@ public class Simulacion {
                             r ->
                                     System.out.printf(
                                             Locale.ROOT,
-                                            "%-8d %-8d %-11d %12.2f %12.2f %14.2f %12.2f%n",
+                                            "%-8d %-8d %-11d %12s %12s %14s %12.2f %10.2f%n",
                                             r.picaros(),
                                             r.santos(),
                                             r.justicieros(),
-                                            r.avgPicaro(),
-                                            r.avgSanto(),
-                                            r.avgJusticiero(),
-                                            r.totalWealth()));
+                                            displayOptional(r.avgPicaro()),
+                                            displayOptional(r.avgSanto()),
+                                            displayOptional(r.avgJusticiero()),
+                                            r.totalWealth(),
+                                            r.bienestarVsInicialPct()));
         }
         System.out.println("(Full matrix: " + rows.size() + " rows in results/resultados.csv)");
     }
@@ -162,29 +179,38 @@ public class Simulacion {
             int picaros,
             int santos,
             int justicieros,
-            double avgPicaro,
-            double avgSanto,
-            double avgJusticiero,
+            Double avgPicaro,
+            Double avgSanto,
+            Double avgJusticiero,
             double totalWealth,
+            double bienestarVsInicialPct,
             boolean balanceOk) {
 
         static Row from(Composition c, GameResult result) {
+            double inicialTotal =
+                    result.config().monedasIniciales() * result.config().jugadores();
+            double bienestar =
+                    inicialTotal == 0
+                            ? 0.0
+                            : (result.totalWealth() - inicialTotal) / inicialTotal * 100.0;
             return new Row(
                     c.picaros(),
                     c.santos(),
                     c.justicieros(),
-                    nanToZero(result.averageFor(ParticipantType.PICARO), c.picaros()),
-                    nanToZero(result.averageFor(ParticipantType.SANTO), c.santos()),
-                    nanToZero(result.averageFor(ParticipantType.JUSTICIERO), c.justicieros()),
+                    avgOrNull(result, ParticipantType.PICARO, c.picaros()),
+                    avgOrNull(result, ParticipantType.SANTO, c.santos()),
+                    avgOrNull(result, ParticipantType.JUSTICIERO, c.justicieros()),
                     result.totalWealth(),
+                    bienestar,
                     result.balanceOk());
         }
 
-        private static double nanToZero(double avg, int count) {
-            if (count == 0 || Double.isNaN(avg)) {
-                return 0.0;
+        private static Double avgOrNull(GameResult result, ParticipantType type, int count) {
+            if (count == 0) {
+                return null;
             }
-            return avg;
+            double avg = result.averageFor(type);
+            return Double.isNaN(avg) ? null : avg;
         }
     }
 }

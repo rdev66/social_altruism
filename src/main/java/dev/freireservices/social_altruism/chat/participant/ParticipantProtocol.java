@@ -32,6 +32,11 @@ public class ParticipantProtocol {
     public record SessionEnded() implements ParticipantMessage {
     }
 
+    /** Session asks the participant to report its local coin balance. */
+    public record RequestFinalBalance(ActorRef<SessionMessage> session)
+            implements ParticipantMessage {
+    }
+
     /**
      * Turn settlement: equal share of pot×multiplier, plus the contribution map for strategies.
      */

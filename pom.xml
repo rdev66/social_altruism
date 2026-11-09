@@ -99,12 +99,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.0.0</version>
                 <configuration>
-                    <executable>java</executable>
-                    <arguments>
-                        <argument>-classpath</argument>
-                        <classpath />
-                        <argument>dev.freireservices.social_altruism.chat.Simulacion</argument>
-                    </arguments>
+                    <mainClass>dev.freireservices.social_altruism.chat.Simulacion</mainClass>
                 </configuration>
             </plugin>
             <plugin>

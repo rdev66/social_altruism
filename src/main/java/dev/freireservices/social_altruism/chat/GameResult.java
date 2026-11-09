@@ -13,7 +13,12 @@ public record GameResult(
         double totalWealth,
         boolean balanceOk) {
 
-    public record PlayerOutcome(String name, ParticipantType type, double finalCoins) {}
+    public record PlayerOutcome(
+            String name,
+            ParticipantType type,
+            double finalCoins,
+            double aportadoTotal,
+            double recibidoTotal) {}
 
     public Map<ParticipantType, Double> averageByType() {
         return players.stream()

@@ -4,6 +4,7 @@ import org.apache.pekko.actor.typed.ActorRef;
 import dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.ParticipantMessage;
 
 import java.util.List;
+import java.util.Map;
 
 public class SessionProtocol {
 
@@ -24,10 +25,15 @@ public class SessionProtocol {
             List<ActorRef<ParticipantMessage>> participants,
             double returnedAmount,
             int turn,
-            java.util.Map<ActorRef<ParticipantMessage>, Double> contributions)
+            Map<ActorRef<ParticipantMessage>, Double> contributions)
             implements SessionMessage {
     }
 
     public record EndSession() implements SessionMessage {
+    }
+
+    /** Participant reports its local coin balance for ledger reconciliation. */
+    public record ReportBalance(ActorRef<ParticipantMessage> from, double coins)
+            implements SessionMessage {
     }
 }

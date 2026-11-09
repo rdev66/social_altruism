@@ -2,6 +2,7 @@ package dev.freireservices.social_altruism.chat.potroom;
 
 import dev.freireservices.social_altruism.chat.GameConfig;
 import dev.freireservices.social_altruism.chat.GameResult;
+import dev.freireservices.social_altruism.chat.participant.ParticipantType;
 import org.apache.pekko.actor.typed.ActorRef;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
@@ -11,13 +12,16 @@ import dev.freireservices.social_altruism.chat.potroom.PotRoomProtocol.PotRoomMe
 import dev.freireservices.social_altruism.chat.potroom.SessionProtocol.SessionMessage;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static dev.freireservices.social_altruism.chat.participant.ParticipantProtocol.*;
 
 public class PotRoom {
     private final ActorContext<PotRoomMessage> context;
     private final List<ActorRef<ParticipantMessage>> participants;
+    private final Map<ActorRef<ParticipantMessage>, ParticipantType> knownTypes;
     private final GameConfig config;
     private final ActorRef<GameResult> resultRef;
     private boolean started;
@@ -28,6 +32,7 @@ public class PotRoom {
             ActorRef<GameResult> resultRef) {
         this.context = context;
         this.participants = new ArrayList<>();
+        this.knownTypes = new LinkedHashMap<>();
         this.config = config;
         this.resultRef = resultRef;
         this.started = false;
@@ -38,9 +43,15 @@ public class PotRoom {
             return Behaviors.same();
         }
 
+        if (enterPot.type() == null) {
+            throw new IllegalStateException(
+                    "Missing ParticipantType for " + enterPot.replyTo().path().name());
+        }
+
         context.getLog().info("Participant joined {} pot", enterPot.replyTo().path().name());
 
         participants.add(enterPot.replyTo());
+        knownTypes.put(enterPot.replyTo(), enterPot.type());
 
         if (config.jugadores() == participants.size()) {
             context.getLog().info("All participants joined; pot is ready to start.");
@@ -48,12 +59,22 @@ public class PotRoom {
 
             ActorRef<SessionMessage> session =
                     context.spawn(
-                            Session.create(config, List.copyOf(participants), resultRef),
+                            Session.create(
+                                    config,
+                                    List.copyOf(participants),
+                                    Map.copyOf(knownTypes),
+                                    resultRef),
                             "session");
 
             participants.forEach(p -> p.tell(new SessionGranted(context.getSelf(), session.narrow())));
             participants.forEach(
-                    p -> p.tell(new SessionStarted(context.getSelf(), session, List.copyOf(participants), config)));
+                    p ->
+                            p.tell(
+                                    new SessionStarted(
+                                            context.getSelf(),
+                                            session,
+                                            List.copyOf(participants),
+                                            config)));
 
             return Behaviors.same();
         }
