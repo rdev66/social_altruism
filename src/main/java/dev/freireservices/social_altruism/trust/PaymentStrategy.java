@@ -27,8 +27,12 @@ public interface PaymentStrategy {
         }
     }
 
-    /** One revealed delivery outcome. */
-    record Observation(int workRound, boolean bad, double paid, double value) {}
+    /**
+     * One revealed delivery outcome.
+     *
+     * @param contractorId identity of the contractor who did the work (increments on each switch)
+     */
+    record Observation(int workRound, boolean bad, double paid, double value, int contractorId) {}
 
     record ObservationBatch(java.util.List<Observation> items) {
         boolean anyBad() {
