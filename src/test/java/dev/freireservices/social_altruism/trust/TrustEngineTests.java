@@ -1,0 +1,103 @@
+package dev.freireservices.social_altruism.trust;
+
+import org.junit.Test;
+
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
+
+public class TrustEngineTests {
+
+    /** p=0, ε=0: SANTO depletes B=1000 at 40/round → value 1300, profit 300. */
+    @Test
+    public void santoExhaustsBudgetAgainstAllHonest() {
+        TrustConfig config = TrustConfig.defaults(0.0, 0).withNoise(0.0);
+        TrustResult result = TrustEngine.run(config, Strategies.santo(), 0L);
+        assertThat(result.totalPaid(), closeTo(1000.0, 1e-9));
+        assertThat(result.totalValue(), closeTo(1300.0, 1e-9));
+        assertThat(result.profit(), closeTo(300.0, 1e-9));
+        assertThat(result.verifyCosts(), closeTo(0.0, 1e-9));
+        assertThat(result.switchCosts(), closeTo(0.0, 1e-9));
+        assertThat(result.budgetRemaining(), closeTo(0.0, 1e-9));
+    }
+
+    /** p=1, d=0: VERIFICADOR loses less than SANTO. */
+    @Test
+    public void verificadorBeatsSantoWhenAllPicaros() {
+        TrustConfig config = TrustConfig.defaults(1.0, 0);
+        double santoMean = meanProfit(config, Strategies.santo(), 50);
+        double verMean = meanProfit(config, Strategies.verificador(), 50);
+        assertThat(verMean, greaterThan(santoMean));
+    }
+
+    /**
+     * Larger delay does not improve JUSTICIERO mean (non-increasing in d) for fixed p and the same
+     * seed set.
+     */
+    @Test
+    public void justicieroNonIncreasingInDelay() {
+        double p = 0.30;
+        long[] seeds = new long[80];
+        for (int i = 0; i < seeds.length; i++) {
+            seeds[i] = i;
+        }
+        double prev = Double.POSITIVE_INFINITY;
+        for (int d = 0; d <= 10; d++) {
+            TrustConfig config = TrustConfig.defaults(p, d);
+            double mean = 0;
+            for (long seed : seeds) {
+                mean += TrustEngine.run(config, Strategies.justiciero(), seed).profit();
+            }
+            mean /= seeds.length;
+            assertThat(
+                    "d=" + d + " mean=" + mean + " prev=" + prev,
+                    mean,
+                    lessThanOrEqualTo(prev + 1e-9));
+            prev = mean;
+        }
+    }
+
+    @Test
+    public void sameSeedSameResult_differentSeedsDiverge() {
+        TrustConfig config = TrustConfig.defaults(0.25, 2);
+        TrustResult a1 = TrustEngine.run(config, Strategies.gradual(), 42L);
+        TrustResult a2 = TrustEngine.run(config, Strategies.gradual(), 42L);
+        assertEquals(a1.profit(), a2.profit(), 0.0);
+        assertEquals(a1.totalPaid(), a2.totalPaid(), 0.0);
+
+        TrustResult b = TrustEngine.run(config, Strategies.gradual(), 43L);
+        assertNotEquals(a1.profit(), b.profit());
+    }
+
+    /** Never spend more than B; profit bounded below by −B. */
+    @Test
+    public void budgetRespectedAcrossStrategies() {
+        TrustConfig config = TrustConfig.defaults(0.5, 3);
+        for (PaymentStrategy strategy : Strategies.all()) {
+            for (long seed = 0; seed < 40; seed++) {
+                TrustResult r = TrustEngine.run(config, strategy, seed);
+                double spent = r.totalPaid() + r.verifyCosts() + r.switchCosts();
+                assertThat(strategy.name(), spent, lessThanOrEqualTo(config.budget() + 1e-9));
+                assertThat(strategy.name(), r.budgetRemaining(), greaterThanOrEqualTo(-1e-9));
+                assertThat(
+                        strategy.name(),
+                        r.profit(),
+                        greaterThanOrEqualTo(-config.budget() - 1e-9));
+                assertEquals(
+                        r.profit(),
+                        r.totalValue() - r.totalPaid() - r.verifyCosts() - r.switchCosts(),
+                        1e-9);
+            }
+        }
+    }
+
+    private static double meanProfit(TrustConfig config, PaymentStrategy strategy, int n) {
+        double s = 0;
+        for (int i = 0; i < n; i++) {
+            s += TrustEngine.run(config, strategy, i).profit();
+        }
+        return s / n;
+    }
+}
